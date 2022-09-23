@@ -9,12 +9,16 @@ end
 add_requires("zinc main", {configs = {shared = true}})
 
 target("moon")
-    set_kind("$(kind)")
+    set_kind("shared")
     add_includedirs("moon/include", {public = true})
     add_defines("MOON_CONFIG_SHARED_LIB" , "MOON_EXPORTS")
     set_languages("cxx17")
     add_files("moon/src/**.cpp")
     add_packages("zinc")
+
+    if is_plat("windows") then
+        add_syslinks("User32", "Shell32", "Gdi32", "Kernel32")
+    end
 
 target("pilot")
     set_kind("binary")

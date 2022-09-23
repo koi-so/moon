@@ -7,7 +7,8 @@
 namespace moon {
 class Window {
 public:
-  static auto Create() -> zinc::unique<Window>;
+  static MOON_API auto Create(const WindowAttributes &attributes)
+      -> zinc::unique<Window>;
   virtual ~Window() = default;
 
   virtual void set_position(const Offset2D &position) = 0;
@@ -22,10 +23,10 @@ public:
   virtual void set_attributes(const WindowAttributes &attributes) = 0;
   [[nodiscard]] virtual auto get_attributes() const -> WindowAttributes = 0;
 
-  [[nodiscard]] auto has_focus() const -> bool;
-  [[nodiscard]] auto has_closed() const -> bool;
+  [[nodiscard]] auto MOON_API has_focus() const -> bool;
+  [[nodiscard]] auto MOON_API has_closed() const -> bool;
 
-  void signal_close();
+  void MOON_API signal_close();
   virtual void pump_events() = 0;
 
 private:

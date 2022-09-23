@@ -1,14 +1,18 @@
 #include "moon/moon.h"
-#include "zinc/tuple.h"
 
 #include <iostream>
 
 auto main() -> int {
-  auto num = get_num_optional();
-  std::cout << num.value() << std::endl;
+  auto window_attr = moon::WindowAttributes{};
+  window_attr.resizable = true;
+  window_attr.size = {800, 600};
+  window_attr.visible = true;
 
-  auto t = some_tuple();
-  std::cout << zinc::get_tuple<0>(t) << std::endl;
+  auto u_window = moon::Window::Create(window_attr);
+
+  while (!u_window->has_closed()) {
+    u_window->pump_events();
+  }
 
   return 0;
 }

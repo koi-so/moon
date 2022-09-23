@@ -1,5 +1,6 @@
 #pragma once
 
+// #define ZINC_CONFIG_ENABLE_ASSERT 1
 #include "zinc/zinc.h"
 
 // Shared library
@@ -16,3 +17,7 @@
 #else
 #define MOON_API
 #endif
+
+#define NO_COPY(X)                                                             \
+  X(const X &) = delete;                                                       \
+  auto operator=(const X &)->X & = delete
