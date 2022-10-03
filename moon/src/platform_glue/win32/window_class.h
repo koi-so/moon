@@ -3,9 +3,8 @@
 #include "moon/base.h"
 
 namespace moon {
-class Win32WindowClass {
+class Win32WindowClass : public zinc::non_copyable {
 public:
-  NO_COPY(Win32WindowClass);
   ~Win32WindowClass();
 
   static auto get() -> Win32WindowClass *;

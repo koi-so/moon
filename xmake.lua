@@ -13,19 +13,20 @@ target("moon")
     add_includedirs("moon/include", {public = true})
     add_defines("MOON_CONFIG_SHARED_LIB" , "MOON_EXPORTS")
     set_languages("cxx17")
-    add_files("moon/src/**.cpp")
-    add_packages("zinc")
+    -- not including platform code
+    add_files("moon/src/**.cpp|platform_glue/*/**.cpp")
 
     if is_plat("windows") then
         add_syslinks("User32", "Shell32", "Gdi32", "Kernel32")
+        add_files("moon/src/platform_glue/win32/**.cpp")
     end
+
+    add_packages("zinc")
 
 target("pilot")
     set_kind("binary")
     add_files("pilot/src/**.cpp")
     set_languages("cxx17")
-    if is_kind("shared") then
-        add_defines("MOON_CONFIG_SHARED_LIB")
-    end
+    add_defines("MOON_CONFIG_SHARED_LIB")
     add_deps("moon")
     add_packages("zinc")

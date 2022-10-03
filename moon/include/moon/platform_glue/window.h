@@ -5,7 +5,7 @@
 #include "window_attributes.h"
 
 namespace moon {
-class Window {
+class Window : public zinc::non_copyable {
 public:
   static MOON_API auto Create(const WindowAttributes &attributes)
       -> zinc::unique<Window>;
