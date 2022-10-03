@@ -6,7 +6,7 @@
 
 namespace moon {
 struct WindowAttributes {
-  // String title;
+  zinc::string_view title;
   Extent2D size;
   Offset2D position;
   bool visible{false};

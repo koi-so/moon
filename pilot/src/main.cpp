@@ -1,9 +1,9 @@
 #include "moon/moon.h"
-
-#include <iostream>
+#include "zinc/allocator/sys.h"
 
 auto main() -> int {
   auto window_attr = moon::WindowAttributes{};
+  window_attr.title = "Retroreflector";
   window_attr.resizable = true;
   window_attr.size = {800, 600};
   window_attr.visible = true;

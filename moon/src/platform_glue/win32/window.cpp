@@ -113,7 +113,12 @@ auto Win32Window::CreateWindowHandle(const WindowAttributes &attributes)
     m_context = *context;
   }
 
-  HWND window = CreateWindowExW(0, window_class->get_class_name(), L"TODO",
+  wchar_t title[256];
+  auto converted_count = MultiByteToWideChar(
+      CP_UTF8, 0, attributes.title.data(),
+      static_cast<i32>(attributes.title.length()), title, sizeof(title));
+  title[converted_count] = L'\0';
+  HWND window = CreateWindowExW(0, window_class->get_class_name(), title,
                                 appearance.style, appearance.position.x,
                                 appearance.position.y, appearance.size.width,
                                 appearance.size.height, root_window, nullptr,
