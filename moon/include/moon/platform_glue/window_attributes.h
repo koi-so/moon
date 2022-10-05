@@ -2,7 +2,7 @@
 
 #include "moon/base.h"
 
-#include "window_spatial.h"
+#include "spatial.h"
 
 namespace moon {
 struct WindowAttributes {

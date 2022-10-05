@@ -1,8 +1,5 @@
 #include "dynamic_library.h"
 
-#include <WinBase.h>
-#include <errhandlingapi.h>
-
 namespace moon {
 static auto LoadLibrarySafe(char const *name) -> HMODULE {
   UINT prevMode = SetErrorMode(0);
@@ -23,7 +20,7 @@ auto DynamicLibrary::LibraryExists(char const *name) -> bool {
 }
 
 auto DynamicLibrary::Load(char const *name) -> zinc::unique<DynamicLibrary> {
-  return zinc::MakeUnique<Win32DynamicLibrary>(name);
+  return zinc::make_unique<Win32DynamicLibrary>(name);
 }
 
 Win32DynamicLibrary::Win32DynamicLibrary(char const *name) {

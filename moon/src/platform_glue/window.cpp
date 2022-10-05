@@ -8,7 +8,7 @@ namespace moon {
 auto Window::Create(const WindowAttributes &attributes)
     -> zinc::unique<Window> {
 #if ZINC_PLATFORM_WINDOWS
-  return zinc::MakeUnique<Win32Window>(attributes);
+  return zinc::make_unique<Win32Window>(attributes);
 #endif
 }
 

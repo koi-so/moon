@@ -2,10 +2,6 @@
 
 #include "window_class.h"
 
-#include <processthreadsapi.h>
-#include <shellapi.h>
-#include <stringapiset.h>
-
 namespace moon {
 struct WindowAppearance {
   DWORD style = 0;

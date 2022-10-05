@@ -4,8 +4,6 @@
 #include "moon/platform_glue/platform_includes/prelude.h"
 #include "window_callback.h"
 
-#include <wingdi.h>
-
 namespace moon {
 Win32WindowClass::Win32WindowClass() {
   WNDCLASSEX wcex = {};
