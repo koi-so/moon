@@ -12,8 +12,6 @@ auto main() -> int {
 
   auto u_window = moon::Window::Create(window_attr);
 
-  std::cout << "Hello, world!" << std::endl;
-
   while (!u_window->has_closed()) {
     u_window->pump_events();
   }
