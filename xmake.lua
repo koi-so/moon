@@ -6,12 +6,13 @@ elseif is_mode("release") then
 	add_rules("mode.release")
 end
 
-add_requires("zinc main", {configs = {shared = true}})
+add_requires("zinc main", { configs = { shared = true } })
+
 
 target("moon")
     set_kind("shared")
-    add_includedirs("moon/include", {public = true})
-    add_defines("MOON_CONFIG_SHARED_LIB" , "MOON_EXPORTS")
+    add_includedirs("moon/include", { public = true })
+    add_defines("MOON_CONFIG_SHARED_LIB", "MOON_EXPORTS")
     set_languages("cxx17")
     -- not including platform code
     add_files("moon/src/**.cpp|platform_glue/*/**.cpp")

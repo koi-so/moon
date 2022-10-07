@@ -1,6 +1,8 @@
 #pragma once
 
-// #define ZINC_CONFIG_ENABLE_ASSERT 1
+#if _DEBUG
+#define ZINC_CONFIG_ENABLE_ASSERT 1
+#endif
 #include "zinc/zinc.h"
 
 // Shared library

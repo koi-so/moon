@@ -6,7 +6,7 @@
 #include "moon/platform_glue/dynamic_library.h"
 
 namespace moon {
-struct Win32DynamicLibrary final : public DynamicLibrary {
+class Win32DynamicLibrary final : public DynamicLibrary {
 public:
   Win32DynamicLibrary(char const *name);
   ~Win32DynamicLibrary();

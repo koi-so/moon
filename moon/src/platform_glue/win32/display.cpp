@@ -38,7 +38,7 @@ static auto CALLBACK Win32MonitorChangedEnumProcedure(HMONITOR monitor, HDC hDC,
   auto &info = *reinterpret_cast<MonitorChangedInfo *>(data);
   auto it = std::find_if(g_display_list.begin(), g_display_list.end(),
                          [monitor](const Win32DisplayContainer &entry) -> bool {
-                           return (entry.display->GetNative() == monitor);
+                           return (entry.display->get_native() == monitor);
                          });
   if (it != g_display_list.end())
     info.registered_monitors++;
@@ -61,7 +61,7 @@ static auto CALLBACK Win32MonitorEnumProcedure(HMONITOR monitor, HDC hDC,
     -> BOOL {
   auto it = std::find_if(g_display_list.begin(), g_display_list.end(),
                          [monitor](const Win32DisplayContainer &entry) -> bool {
-                           return (entry.display->GetNative() == monitor);
+                           return (entry.display->get_native() == monitor);
                          });
   if (it != g_display_list.end()) {
     /* Update cache index */
@@ -69,7 +69,7 @@ static auto CALLBACK Win32MonitorEnumProcedure(HMONITOR monitor, HDC hDC,
   } else {
     /* Allocate new display object */
     auto display = zinc::make_unique<Win32Display>(monitor);
-    if (display->IsPrimary())
+    if (display->is_primary())
       g_primary_display = display.get();
     g_display_list.emplace_back(std::move(display), g_display_cache_index);
   }
@@ -109,12 +109,12 @@ static auto IsCursorVisible(bool &visible) -> bool {
   return false;
 }
 
-auto Display::Count() -> usize {
+auto Display::count() -> usize {
   UpdateDisplayList();
   return g_display_list.size();
 }
 
-auto Display::GetList() -> zinc::array_view<Display *> {
+auto Display::get_list() -> zinc::array_view<Display *> {
   if (UpdateDisplayList()) {
     /* Update reference list and append null terminator to array */
     g_display_ref.clear();
@@ -129,18 +129,18 @@ auto Display::GetList() -> zinc::array_view<Display *> {
           g_display_ref.size() - 1};
 }
 
-auto Display::Get(usize index) -> Display * {
+auto Display::get(usize index) -> Display * {
   UpdateDisplayList();
   return (index < g_display_list.size() ? g_display_list[index].display.get()
                                         : nullptr);
 }
 
-auto Display::GetPrimary() -> Display * {
+auto Display::get_primary() -> Display * {
   UpdateDisplayList();
   return g_primary_display;
 }
 
-auto Display::ToggleCursor(bool show) -> bool {
+auto Display::toggle_cursor(bool show) -> bool {
   if (show)
     ::ShowCursor(TRUE);
   else
@@ -148,18 +148,18 @@ auto Display::ToggleCursor(bool show) -> bool {
   return true;
 }
 
-auto Display::IsCursorVisible() -> bool {
+auto Display::is_cursor_visible() -> bool {
   bool visible;
   if (moon::IsCursorVisible(visible))
     return visible;
   return false;
 }
 
-auto Display::SetCursorPosition(Offset2D const &position) -> bool {
+auto Display::set_cursor_position(Offset2D const &position) -> bool {
   return (::SetCursorPos(position.x, position.y) != FALSE);
 }
 
-auto Display::GetCursorPosition() -> Offset2D {
+auto Display::get_cursor_position() -> Offset2D {
   POINT point;
   if (::GetCursorPos(&point)) {
     return {point.x, point.y};
@@ -169,15 +169,15 @@ auto Display::GetCursorPosition() -> Offset2D {
 
 Win32Display::Win32Display(HMONITOR monitor) : m_monitor(monitor) {}
 
-auto Win32Display::IsPrimary() const -> bool {
+auto Win32Display::is_primary() const -> bool {
   MONITORINFO info;
-  GetInfo(info);
+  get_info(info);
   return ((info.dwFlags & MONITORINFOF_PRIMARY) != 0);
 }
 
-auto Win32Display::GetDeviceName() const -> zinc::string {
+auto Win32Display::get_device_name() const -> zinc::string {
   MONITORINFOEX infoEx;
-  GetInfo(infoEx);
+  get_info(infoEx);
   char device_name[256];
   auto device_name_size =
       WideCharToMultiByte(CP_UTF8, 0, infoEx.szDevice, -1, device_name,
@@ -186,25 +186,25 @@ auto Win32Display::GetDeviceName() const -> zinc::string {
       zinc::string{device_name, static_cast<usize>(device_name_size)});
 }
 
-auto Win32Display::GetOffset() const -> Offset2D {
+auto Win32Display::get_offset() const -> Offset2D {
   MONITORINFO info;
-  GetInfo(info);
+  get_info(info);
   return {static_cast<i32>(info.rcMonitor.left),
           static_cast<i32>(info.rcMonitor.top)};
 }
 
-auto Win32Display::ResetDisplayAttributes() -> bool {
+auto Win32Display::reset_display_attributes() -> bool {
   MONITORINFOEX infoEx;
-  GetInfo(infoEx);
+  get_info(infoEx);
   auto result =
       ChangeDisplaySettingsExW(infoEx.szDevice, nullptr, nullptr, 0, nullptr);
   return (result == DISP_CHANGE_SUCCESSFUL);
 }
 
-auto Win32Display::SetDisplayAttributes(const DisplayAttributes &attributes)
+auto Win32Display::set_display_attributes(const DisplayAttributes &attributes)
     -> bool {
   MONITORINFOEX infoEx;
-  GetInfo(infoEx);
+  get_info(infoEx);
 
   DEVMODE devMode = {};
   {
@@ -218,10 +218,10 @@ auto Win32Display::SetDisplayAttributes(const DisplayAttributes &attributes)
   return (result == DISP_CHANGE_SUCCESSFUL);
 }
 
-auto Win32Display::GetDisplayAttributes() const -> DisplayAttributes {
+auto Win32Display::get_display_attributes() const -> DisplayAttributes {
   /* Get display device name */
   MONITORINFOEX infoEx;
-  GetInfo(infoEx);
+  get_info(infoEx);
 
   /* Get current display settings */
   DEVMODE devMode;
@@ -237,12 +237,12 @@ auto Win32Display::GetDisplayAttributes() const -> DisplayAttributes {
   return {};
 }
 
-auto Win32Display::GetDisplayModeList() const
+auto Win32Display::get_display_mode_list() const
     -> zinc::vector<DisplayAttributes> {
   zinc::vector<DisplayAttributes> display_attributes;
 
   MONITORINFOEX infoEx;
-  GetInfo(infoEx);
+  get_info(infoEx);
 
   const DWORD field_bits = (DM_PELSWIDTH | DM_PELSHEIGHT | DM_DISPLAYFREQUENCY);
 
@@ -263,12 +263,12 @@ auto Win32Display::GetDisplayModeList() const
   return std::move(display_attributes);
 }
 
-auto Win32Display::GetInfo(MONITORINFO &info) const -> void {
+auto Win32Display::get_info(MONITORINFO &info) const -> void {
   info.cbSize = sizeof(info);
   ::GetMonitorInfo(m_monitor, &info);
 }
 
-auto Win32Display::GetInfo(MONITORINFOEX &info) const -> void {
+auto Win32Display::get_info(MONITORINFOEX &info) const -> void {
   info.cbSize = sizeof(info);
   ::GetMonitorInfo(m_monitor, &info);
 }

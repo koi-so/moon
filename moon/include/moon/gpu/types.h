@@ -2,61 +2,159 @@
 
 #include "moon/base.h"
 
+// #if MOON_CONFIG_SHARED_LIB
+// #define WGPU_SHARED_LIBRARY 1
+// #endif
+// #if MOON_EXPORTS
+// #define WGPU_IMPLEMENTATION 1
+// #endif
+#include "webgpu/webgpu.h"
+
 namespace moon::gpu {
-u32 ARRAY_LAYER_COUNT_UNDEFINED = (0xffffffffUL);
-u32 COPY_STRIDE_UNDEFINED = (0xffffffffUL);
-u32 LIMIT_U32_UNDEFINED = (0xffffffffUL);
-u64 LIMIT_U64_UNDEFINED = (0xffffffffffffffffULL);
-u32 MIP_LEVEL_COUNT_UNDEFINED = (0xffffffffUL);
-u64 WHOLE_MAP_SIZE = SIZE_MAX;
-u64 WHOLE_SIZE = (0xffffffffffffffffULL);
 
-using Flags = u32;
+template <typename T> struct IsMoonBitmask {
+  static constexpr bool enable = false;
+};
 
-// Forward
+template <typename T, typename Enable = void> struct LowerBitmask {
+  static constexpr bool enable = false;
+};
 
-using Adapter = struct AdapterImpl *;
-using BindGroup = struct BindGroupImpl *;
-using BindGroupLayout = struct BindGroupLayoutImpl *;
-using Buffer = struct BufferImpl *;
-using CommandBuffer = struct CommandBufferImpl *;
-using CommandEncoder = struct CommandEncoderImpl *;
-using ComputePassEncoder = struct ComputePassEncoderImpl *;
-using ComputePipeline = struct ComputePipelineImpl *;
-using Device = struct DeviceImpl *;
-using Instance = struct InstanceImpl *;
-using PipelineLayout = struct PipelineLayoutImpl *;
-using QuerySet = struct QuerySetImpl *;
-using Queue = struct QueueImpl *;
-using RenderBundle = struct RenderBundleImpl *;
-using RenderBundleEncoder = struct RenderBundleEncoderImpl *;
-using RenderPassEncoder = struct RenderPassEncoderImpl *;
-using RenderPipeline = struct RenderPipelineImpl *;
-using Sampler = struct SamplerImpl *;
-using ShaderModule = struct ShaderModuleImpl *;
-using Surface = struct SurfaceImpl *;
-using SwapChain = struct SwapChainImpl *;
-using Texture = struct TextureImpl *;
-using TextureView = struct TextureViewImpl *;
+template <typename T>
+struct LowerBitmask<T,
+                    typename std::enable_if<IsMoonBitmask<T>::enable>::type> {
+  static constexpr bool enable = true;
+  using type = T;
+  constexpr static auto Lower(T t) -> T { return t; }
+};
 
-// enums
+template <typename T> struct BoolConvertible {
+  using Integral = typename std::underlying_type<T>::type;
 
-enum struct AdapterType {
+  // NOLINTNEXTLINE(runtime/explicit)
+  constexpr BoolConvertible(Integral value) : value(value) {}
+  constexpr operator bool() const { return value != 0; }
+  constexpr operator T() const { return static_cast<T>(value); }
+
+  Integral value;
+};
+
+template <typename T> struct LowerBitmask<BoolConvertible<T>> {
+  static constexpr bool enable = true;
+  using type = T;
+  static constexpr auto Lower(BoolConvertible<T> t) -> type { return t; }
+};
+
+template <typename T1, typename T2,
+          typename = typename std::enable_if<LowerBitmask<T1>::enable &&
+                                             LowerBitmask<T2>::enable>::type>
+constexpr auto operator|(T1 left, T2 right)
+    -> BoolConvertible<typename LowerBitmask<T1>::type> {
+  using T = typename LowerBitmask<T1>::type;
+  using Integral = typename std::underlying_type<T>::type;
+  return static_cast<Integral>(LowerBitmask<T1>::Lower(left)) |
+         static_cast<Integral>(LowerBitmask<T2>::Lower(right));
+}
+
+template <typename T1, typename T2,
+          typename = typename std::enable_if<LowerBitmask<T1>::enable &&
+                                             LowerBitmask<T2>::enable>::type>
+constexpr auto operator&(T1 left, T2 right)
+    -> BoolConvertible<typename LowerBitmask<T1>::type> {
+  using T = typename LowerBitmask<T1>::type;
+  using Integral = typename std::underlying_type<T>::type;
+  return static_cast<Integral>(LowerBitmask<T1>::Lower(left)) &
+         static_cast<Integral>(LowerBitmask<T2>::Lower(right));
+}
+
+template <typename T1, typename T2,
+          typename = typename std::enable_if<LowerBitmask<T1>::enable &&
+                                             LowerBitmask<T2>::enable>::type>
+constexpr auto operator^(T1 left, T2 right)
+    -> BoolConvertible<typename LowerBitmask<T1>::type> {
+  using T = typename LowerBitmask<T1>::type;
+  using Integral = typename std::underlying_type<T>::type;
+  return static_cast<Integral>(LowerBitmask<T1>::Lower(left)) ^
+         static_cast<Integral>(LowerBitmask<T2>::Lower(right));
+}
+
+template <typename T1>
+constexpr auto operator~(T1 t)
+    -> BoolConvertible<typename LowerBitmask<T1>::type> {
+  using T = typename LowerBitmask<T1>::type;
+  using Integral = typename std::underlying_type<T>::type;
+  return ~static_cast<Integral>(LowerBitmask<T1>::Lower(t));
+}
+
+template <typename T, typename T2,
+          typename = typename std::enable_if<IsMoonBitmask<T>::enable &&
+                                             LowerBitmask<T2>::enable>::type>
+constexpr auto operator&=(T &l, T2 right) -> T & {
+  T r = LowerBitmask<T2>::Lower(right);
+  l = l & r;
+  return l;
+}
+
+template <typename T, typename T2,
+          typename = typename std::enable_if<IsMoonBitmask<T>::enable &&
+                                             LowerBitmask<T2>::enable>::type>
+constexpr auto operator|=(T &l, T2 right) -> T & {
+  T r = LowerBitmask<T2>::Lower(right);
+  l = l | r;
+  return l;
+}
+
+template <typename T, typename T2,
+          typename = typename std::enable_if<IsMoonBitmask<T>::enable &&
+                                             LowerBitmask<T2>::enable>::type>
+constexpr auto operator^=(T &l, T2 right) -> T & {
+  T r = LowerBitmask<T2>::Lower(right);
+  l = l ^ r;
+  return l;
+}
+
+template <typename T> constexpr auto HasZeroOrOneBits(T value) -> bool {
+  using Integral = typename std::underlying_type<T>::type;
+  return (static_cast<Integral>(value) & (static_cast<Integral>(value) - 1)) ==
+         0;
+}
+
+namespace detail {
+constexpr auto ConstexprMax(size_t a, size_t b) -> size_t {
+  return a > b ? a : b;
+}
+} // namespace detail
+
+static constexpr u32 kArrayLayerCountUndefined =
+    WGPU_ARRAY_LAYER_COUNT_UNDEFINED;
+static constexpr u32 kCopyStrideUndefined = WGPU_COPY_STRIDE_UNDEFINED;
+static constexpr u32 kLimitU32Undefined = WGPU_LIMIT_U32_UNDEFINED;
+static constexpr uint64_t kLimitU64Undefined = WGPU_LIMIT_U64_UNDEFINED;
+static constexpr u32 kMipLevelCountUndefined = WGPU_MIP_LEVEL_COUNT_UNDEFINED;
+static constexpr u32 kStrideUndefined = WGPU_STRIDE_UNDEFINED;
+static constexpr size_t kWholeMapSize = WGPU_WHOLE_MAP_SIZE;
+static constexpr uint64_t kWholeSize = WGPU_WHOLE_SIZE;
+
+enum class AdapterType : u32 {
   DiscreteGPU = 0x00000000,
   IntegratedGPU = 0x00000001,
   CPU = 0x00000002,
   Unknown = 0x00000003,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct AddressMode {
+enum class AddressMode : u32 {
   Repeat = 0x00000000,
   MirrorRepeat = 0x00000001,
   ClampToEdge = 0x00000002,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct BackendType {
+enum class AlphaMode : u32 {
+  Premultiplied = 0x00000000,
+  Unpremultiplied = 0x00000001,
+  Opaque = 0x00000002,
+};
+
+enum class BackendType : u32 {
   Null = 0x00000000,
   WebGPU = 0x00000001,
   D3D11 = 0x00000002,
@@ -65,10 +163,9 @@ enum struct BackendType {
   Vulkan = 0x00000005,
   OpenGL = 0x00000006,
   OpenGLES = 0x00000007,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct BlendFactor {
+enum class BlendFactor : u32 {
   Zero = 0x00000000,
   One = 0x00000001,
   Src = 0x00000002,
@@ -82,37 +179,33 @@ enum struct BlendFactor {
   SrcAlphaSaturated = 0x0000000A,
   Constant = 0x0000000B,
   OneMinusConstant = 0x0000000C,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct BlendOperation {
+enum class BlendOperation : u32 {
   Add = 0x00000000,
   Subtract = 0x00000001,
   ReverseSubtract = 0x00000002,
   Min = 0x00000003,
   Max = 0x00000004,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct BufferBindingType {
+enum class BufferBindingType : u32 {
   Undefined = 0x00000000,
   Uniform = 0x00000001,
   Storage = 0x00000002,
   ReadOnlyStorage = 0x00000003,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct BufferMapAsyncStatus {
+enum class BufferMapAsyncStatus : u32 {
   Success = 0x00000000,
   Error = 0x00000001,
   Unknown = 0x00000002,
   DeviceLost = 0x00000003,
   DestroyedBeforeCallback = 0x00000004,
   UnmappedBeforeCallback = 0x00000005,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct CompareFunction {
+enum class CompareFunction : u32 {
   Undefined = 0x00000000,
   Never = 0x00000001,
   Less = 0x00000002,
@@ -122,70 +215,61 @@ enum struct CompareFunction {
   Equal = 0x00000006,
   NotEqual = 0x00000007,
   Always = 0x00000008,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct CompilationInfoRequestStatus {
+enum class CompilationInfoRequestStatus : u32 {
   Success = 0x00000000,
   Error = 0x00000001,
   DeviceLost = 0x00000002,
   Unknown = 0x00000003,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct CompilationMessageType {
+enum class CompilationMessageType : u32 {
   Error = 0x00000000,
   Warning = 0x00000001,
   Info = 0x00000002,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct ComputePassTimestampLocation {
+enum class ComputePassTimestampLocation : u32 {
   Beginning = 0x00000000,
   End = 0x00000001,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct CreatePipelineAsyncStatus {
+enum class CreatePipelineAsyncStatus : u32 {
   Success = 0x00000000,
   Error = 0x00000001,
   DeviceLost = 0x00000002,
   DeviceDestroyed = 0x00000003,
   Unknown = 0x00000004,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct CullMode {
+enum class CullMode : u32 {
   None = 0x00000000,
   Front = 0x00000001,
   Back = 0x00000002,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct DeviceLostReason {
+enum class DeviceLostReason : u32 {
   Undefined = 0x00000000,
   Destroyed = 0x00000001,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct ErrorFilter {
+enum class ErrorFilter : u32 {
   Validation = 0x00000000,
   OutOfMemory = 0x00000001,
   Internal = 0x00000002,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct ErrorType {
+enum class ErrorType : u32 {
   NoError = 0x00000000,
   Validation = 0x00000001,
   OutOfMemory = 0x00000002,
   Internal = 0x00000003,
   Unknown = 0x00000004,
   DeviceLost = 0x00000005,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct FeatureName {
+enum class FeatureName : u32 {
   Undefined = 0x00000000,
   DepthClipControl = 0x00000001,
   Depth32FloatStencil8 = 0x00000002,
@@ -197,110 +281,102 @@ enum struct FeatureName {
   IndirectFirstInstance = 0x00000008,
   ShaderF16 = 0x00000009,
   RG11B10UfloatRenderable = 0x0000000A,
-  Force32 = 0x7FFFFFFF
+  MoonShaderFloat16 = 0x000003E9,
+  MoonInternalUsages = 0x000003EA,
+  MoonMultiPlanarFormats = 0x000003EB,
+  MoonNative = 0x000003EC,
+  ChromiumExperimentalDp4a = 0x000003ED,
 };
 
-enum struct FilterMode {
+enum class FilterMode : u32 {
   Nearest = 0x00000000,
   Linear = 0x00000001,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct FrontFace {
+enum class FrontFace : u32 {
   CCW = 0x00000000,
   CW = 0x00000001,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct IndexFormat {
+enum class IndexFormat : u32 {
   Undefined = 0x00000000,
   Uint16 = 0x00000001,
   Uint32 = 0x00000002,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct LoadOp {
+enum class LoadOp : u32 {
   Undefined = 0x00000000,
   Clear = 0x00000001,
   Load = 0x00000002,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct MipmapFilterMode {
-  Nearest = 0x00000000,
-  Linear = 0x00000001,
-  Force32 = 0x7FFFFFFF
+enum class LoggingType : u32 {
+  Verbose = 0x00000000,
+  Info = 0x00000001,
+  Warning = 0x00000002,
+  Error = 0x00000003,
 };
 
-enum struct PipelineStatisticName {
+enum class PipelineStatisticName : u32 {
   VertexShaderInvocations = 0x00000000,
   ClipperInvocations = 0x00000001,
   ClipperPrimitivesOut = 0x00000002,
   FragmentShaderInvocations = 0x00000003,
   ComputeShaderInvocations = 0x00000004,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct PowerPreference {
+enum class PowerPreference : u32 {
   Undefined = 0x00000000,
   LowPower = 0x00000001,
   HighPerformance = 0x00000002,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct PresentMode {
+enum class PresentMode : u32 {
   Immediate = 0x00000000,
   Mailbox = 0x00000001,
   Fifo = 0x00000002,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct PrimitiveTopology {
+enum class PrimitiveTopology : u32 {
   PointList = 0x00000000,
   LineList = 0x00000001,
   LineStrip = 0x00000002,
   TriangleList = 0x00000003,
   TriangleStrip = 0x00000004,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct QueryType {
+enum class QueryType : u32 {
   Occlusion = 0x00000000,
   PipelineStatistics = 0x00000001,
   Timestamp = 0x00000002,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct QueueWorkDoneStatus {
+enum class QueueWorkDoneStatus : u32 {
   Success = 0x00000000,
   Error = 0x00000001,
   Unknown = 0x00000002,
   DeviceLost = 0x00000003,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct RenderPassTimestampLocation {
+enum class RenderPassTimestampLocation : u32 {
   Beginning = 0x00000000,
   End = 0x00000001,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct RequestAdapterStatus {
+enum class RequestAdapterStatus : u32 {
   Success = 0x00000000,
   Unavailable = 0x00000001,
   Error = 0x00000002,
   Unknown = 0x00000003,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct RequestDeviceStatus {
+enum class RequestDeviceStatus : u32 {
   Success = 0x00000000,
   Error = 0x00000001,
   Unknown = 0x00000002,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct s_type {
+enum class SType : u32 {
   Invalid = 0x00000000,
   SurfaceDescriptorFromMetalLayer = 0x00000001,
   SurfaceDescriptorFromWindowsHWND = 0x00000002,
@@ -311,20 +387,27 @@ enum struct s_type {
   PrimitiveDepthClipControl = 0x00000007,
   SurfaceDescriptorFromWaylandSurface = 0x00000008,
   SurfaceDescriptorFromAndroidNativeWindow = 0x00000009,
-  SurfaceDescriptorFromXcbWindow = 0x0000000A,
+  SurfaceDescriptorFromWindowsCoreWindow = 0x0000000B,
+  ExternalTextureBindingEntry = 0x0000000C,
+  ExternalTextureBindingLayout = 0x0000000D,
+  SurfaceDescriptorFromWindowsSwapChainPanel = 0x0000000E,
   RenderPassDescriptorMaxDrawCount = 0x0000000F,
-  Force32 = 0x7FFFFFFF
+  MoonTextureInternalUsageDescriptor = 0x000003E8,
+  MoonTogglesDeviceDescriptor = 0x000003EA,
+  MoonEncoderInternalUsageDescriptor = 0x000003EB,
+  MoonInstanceDescriptor = 0x000003EC,
+  MoonCacheDeviceDescriptor = 0x000003ED,
+  MoonAdapterPropertiesPowerPreference = 0x000003EE,
 };
 
-enum struct SamplerBindingType {
+enum class SamplerBindingType : u32 {
   Undefined = 0x00000000,
   Filtering = 0x00000001,
   NonFiltering = 0x00000002,
   Comparison = 0x00000003,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct StencilOperation {
+enum class StencilOperation : u32 {
   Keep = 0x00000000,
   Zero = 0x00000001,
   Replace = 0x00000002,
@@ -333,45 +416,41 @@ enum struct StencilOperation {
   DecrementClamp = 0x00000005,
   IncrementWrap = 0x00000006,
   DecrementWrap = 0x00000007,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct StorageTextureAccess {
+enum class StorageTextureAccess : u32 {
   Undefined = 0x00000000,
   WriteOnly = 0x00000001,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct StoreOp {
+enum class StoreOp : u32 {
   Undefined = 0x00000000,
   Store = 0x00000001,
   Discard = 0x00000002,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct TextureAspect {
+enum class TextureAspect : u32 {
   All = 0x00000000,
   StencilOnly = 0x00000001,
   DepthOnly = 0x00000002,
-  Force32 = 0x7FFFFFFF
+  Plane0Only = 0x00000003,
+  Plane1Only = 0x00000004,
 };
 
-enum struct TextureComponentType {
+enum class TextureComponentType : u32 {
   Float = 0x00000000,
   Sint = 0x00000001,
   Uint = 0x00000002,
   DepthComparison = 0x00000003,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct TextureDimension {
-  _1D = 0x00000000,
-  _2D = 0x00000001,
-  _3D = 0x00000002,
-  Force32 = 0x7FFFFFFF
+enum class TextureDimension : u32 {
+  e1D = 0x00000000,
+  e2D = 0x00000001,
+  e3D = 0x00000002,
 };
 
-enum struct TextureFormat {
+enum class TextureFormat : u32 {
   Undefined = 0x00000000,
   R8Unorm = 0x00000001,
   R8Snorm = 0x00000002,
@@ -467,31 +546,29 @@ enum struct TextureFormat {
   ASTC12x10UnormSrgb = 0x0000005C,
   ASTC12x12Unorm = 0x0000005D,
   ASTC12x12UnormSrgb = 0x0000005E,
-  Force32 = 0x7FFFFFFF
+  R8BG8Biplanar420Unorm = 0x0000005F,
 };
 
-enum struct TextureSampleType {
+enum class TextureSampleType : u32 {
   Undefined = 0x00000000,
   Float = 0x00000001,
   UnfilterableFloat = 0x00000002,
   Depth = 0x00000003,
   Sint = 0x00000004,
   Uint = 0x00000005,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct TextureViewDimension {
+enum class TextureViewDimension : u32 {
   Undefined = 0x00000000,
-  _1D = 0x00000001,
-  _2D = 0x00000002,
-  _2DArray = 0x00000003,
+  e1D = 0x00000001,
+  e2D = 0x00000002,
+  e2DArray = 0x00000003,
   Cube = 0x00000004,
   CubeArray = 0x00000005,
-  _3D = 0x00000006,
-  Force32 = 0x7FFFFFFF
+  e3D = 0x00000006,
 };
 
-enum struct VertexFormat {
+enum class VertexFormat : u32 {
   Undefined = 0x00000000,
   Uint8x2 = 0x00000001,
   Uint8x4 = 0x00000002,
@@ -523,17 +600,15 @@ enum struct VertexFormat {
   Sint32x2 = 0x0000001C,
   Sint32x3 = 0x0000001D,
   Sint32x4 = 0x0000001E,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct VertexStepMode {
+enum class VertexStepMode : u32 {
   Vertex = 0x00000000,
   Instance = 0x00000001,
   VertexBufferNotUsed = 0x00000002,
-  Force32 = 0x7FFFFFFF
 };
 
-enum struct BufferUsage {
+enum class BufferUsage : u32 {
   None = 0x00000000,
   MapRead = 0x00000001,
   MapWrite = 0x00000002,
@@ -545,101 +620,821 @@ enum struct BufferUsage {
   Storage = 0x00000080,
   Indirect = 0x00000100,
   QueryResolve = 0x00000200,
-  Force32 = 0x7FFFFFFF
 };
-using BufferUsageFlags = Flags;
 
-enum struct ColorWriteMask {
+enum class ColorWriteMask : u32 {
   None = 0x00000000,
   Red = 0x00000001,
   Green = 0x00000002,
   Blue = 0x00000004,
   Alpha = 0x00000008,
   All = 0x0000000F,
-  Force32 = 0x7FFFFFFF
 };
-using ColorWriteMaskFlags = Flags;
 
-enum struct MapMode {
+enum class MapMode : u32 {
   None = 0x00000000,
   Read = 0x00000001,
   Write = 0x00000002,
-  Force32 = 0x7FFFFFFF
 };
-using MapModeFlags = Flags;
 
-enum struct ShaderStage {
+enum class ShaderStage : u32 {
   None = 0x00000000,
   Vertex = 0x00000001,
   Fragment = 0x00000002,
   Compute = 0x00000004,
-  Force32 = 0x7FFFFFFF
 };
-using ShaderStageFlags = Flags;
 
-enum struct TextureUsage {
+enum class TextureUsage : u32 {
   None = 0x00000000,
   CopySrc = 0x00000001,
   CopyDst = 0x00000002,
   TextureBinding = 0x00000004,
   StorageBinding = 0x00000008,
   RenderAttachment = 0x00000010,
-  Force32 = 0x7FFFFFFF
+  Present = 0x00000020,
 };
-using TextureUsageFlags = Flags;
 
-// structures
+using BufferMapCallback = WGPUBufferMapCallback;
+using CompilationInfoCallback = WGPUCompilationInfoCallback;
+using CreateComputePipelineAsyncCallback =
+    WGPUCreateComputePipelineAsyncCallback;
+using CreateRenderPipelineAsyncCallback = WGPUCreateRenderPipelineAsyncCallback;
+using DeviceLostCallback = WGPUDeviceLostCallback;
+using ErrorCallback = WGPUErrorCallback;
+using LoggingCallback = WGPULoggingCallback;
+using Proc = WGPUProc;
+using QueueWorkDoneCallback = WGPUQueueWorkDoneCallback;
+using RequestAdapterCallback = WGPURequestAdapterCallback;
+using RequestDeviceCallback = WGPURequestDeviceCallback;
+
+class MOON_API Adapter;
+class MOON_API BindGroup;
+class MOON_API BindGroupLayout;
+class MOON_API Buffer;
+class MOON_API CommandBuffer;
+class MOON_API CommandEncoder;
+class MOON_API ComputePassEncoder;
+class MOON_API ComputePipeline;
+class MOON_API Device;
+class MOON_API ExternalTexture;
+class MOON_API Instance;
+class MOON_API PipelineLayout;
+class MOON_API QuerySet;
+class MOON_API Queue;
+class MOON_API RenderBundle;
+class MOON_API RenderBundleEncoder;
+class MOON_API RenderPassEncoder;
+class MOON_API RenderPipeline;
+class MOON_API Sampler;
+class MOON_API ShaderModule;
+class MOON_API Surface;
+class MOON_API SwapChain;
+class MOON_API Texture;
+class MOON_API TextureView;
+
+struct AdapterProperties;
+struct BindGroupEntry;
+struct BlendComponent;
+struct BufferBindingLayout;
+struct BufferDescriptor;
+struct Color;
+struct CommandBufferDescriptor;
+struct CommandEncoderDescriptor;
+struct CompilationMessage;
+struct ComputePassTimestampWrite;
+struct ConstantEntry;
+struct CopyTextureForBrowserOptions;
+struct MoonAdapterPropertiesPowerPreference;
+struct MoonCacheDeviceDescriptor;
+struct MoonEncoderInternalUsageDescriptor;
+struct MoonInstanceDescriptor;
+struct MoonTextureInternalUsageDescriptor;
+struct MoonTogglesDeviceDescriptor;
+struct Extent3D;
+struct ExternalTextureBindingEntry;
+struct ExternalTextureBindingLayout;
+struct ExternalTextureDescriptor;
+struct InstanceDescriptor;
+struct Limits;
+struct MultisampleState;
+struct Origin3D;
+struct PipelineLayoutDescriptor;
+struct PrimitiveDepthClipControl;
+struct PrimitiveState;
+struct QuerySetDescriptor;
+struct QueueDescriptor;
+struct RenderBundleDescriptor;
+struct RenderBundleEncoderDescriptor;
+struct RenderPassDepthStencilAttachment;
+struct RenderPassDescriptorMaxDrawCount;
+struct RenderPassTimestampWrite;
+struct RequestAdapterOptions;
+struct SamplerBindingLayout;
+struct SamplerDescriptor;
+struct ShaderModuleDescriptor;
+struct ShaderModuleSPIRVDescriptor;
+struct ShaderModuleWGSLDescriptor;
+struct StencilFaceState;
+struct StorageTextureBindingLayout;
+struct SurfaceDescriptor;
+struct SurfaceDescriptorFromAndroidNativeWindow;
+struct SurfaceDescriptorFromCanvasHTMLSelector;
+struct SurfaceDescriptorFromMetalLayer;
+struct SurfaceDescriptorFromWaylandSurface;
+struct SurfaceDescriptorFromWindowsCoreWindow;
+struct SurfaceDescriptorFromWindowsHWND;
+struct SurfaceDescriptorFromWindowsSwapChainPanel;
+struct SurfaceDescriptorFromXlibWindow;
+struct SwapChainDescriptor;
+struct TextureBindingLayout;
+struct TextureDataLayout;
+struct TextureViewDescriptor;
+struct VertexAttribute;
+struct BindGroupDescriptor;
+struct BindGroupLayoutEntry;
+struct BlendState;
+struct CompilationInfo;
+struct ComputePassDescriptor;
+struct DepthStencilState;
+struct ImageCopyBuffer;
+struct ImageCopyTexture;
+struct ProgrammableStageDescriptor;
+struct RenderPassColorAttachment;
+struct RequiredLimits;
+struct SupportedLimits;
+struct TextureDescriptor;
+struct VertexBufferLayout;
+struct BindGroupLayoutDescriptor;
+struct ColorTargetState;
+struct ComputePipelineDescriptor;
+struct DeviceDescriptor;
+struct RenderPassDescriptor;
+struct VertexState;
+struct FragmentState;
+struct RenderPipelineDescriptor;
+
+template <typename Derived, typename CType> class ObjectBase {
+public:
+  ObjectBase() = default;
+  ObjectBase(CType handle) : mHandle(handle) {
+    if (mHandle)
+      Derived::wgpu_reference(mHandle);
+  }
+  ~ObjectBase() {
+    if (mHandle)
+      Derived::wgpu_release(mHandle);
+  }
+
+  ObjectBase(ObjectBase const &other) : ObjectBase(other.get()) {}
+  auto operator=(ObjectBase const &other) -> Derived & {
+    if (&other != this) {
+      if (mHandle)
+        Derived::wgpu_release(mHandle);
+      mHandle = other.mHandle;
+      if (mHandle)
+        Derived::wgpu_reference(mHandle);
+    }
+
+    return static_cast<Derived &>(*this);
+  }
+
+  ObjectBase(ObjectBase &&other) {
+    mHandle = other.mHandle;
+    other.mHandle = 0;
+  }
+  auto operator=(ObjectBase &&other) -> Derived & {
+    if (&other != this) {
+      if (mHandle)
+        Derived::wgpu_release(mHandle);
+      mHandle = other.mHandle;
+      other.mHandle = 0;
+    }
+
+    return static_cast<Derived &>(*this);
+  }
+
+  ObjectBase(std::nullptr_t) {}
+  auto operator=(std::nullptr_t) -> Derived & {
+    if (mHandle != nullptr) {
+      Derived::wgpu_release(mHandle);
+      mHandle = nullptr;
+    }
+    return static_cast<Derived &>(*this);
+  }
+
+  auto operator==(std::nullptr_t) const -> bool { return mHandle == nullptr; }
+  auto operator!=(std::nullptr_t) const -> bool { return mHandle != nullptr; }
+
+  explicit operator bool() const { return mHandle != nullptr; }
+  [[nodiscard]] auto get() const -> CType { return mHandle; }
+  auto release() -> CType {
+    CType result = mHandle;
+    mHandle = 0;
+    return result;
+  }
+  static auto acquire(CType handle) -> Derived {
+    Derived result;
+    result.mHandle = handle;
+    return result;
+  }
+
+protected:
+  CType mHandle = nullptr;
+};
+
+class Adapter : public ObjectBase<Adapter, WGPUAdapter> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  auto create_device(DeviceDescriptor const *descriptor = nullptr) const
+      -> Device;
+  auto enumerate_features(FeatureName *features) const -> size_t;
+  auto get_limits(SupportedLimits *limits) const -> bool;
+  void get_properties(AdapterProperties *properties) const;
+  [[nodiscard]] auto has_feature(FeatureName feature) const -> bool;
+  void request_device(DeviceDescriptor const *descriptor,
+                      RequestDeviceCallback callback, void *userdata) const;
+
+private:
+  friend ObjectBase<Adapter, WGPUAdapter>;
+  static void wgpu_reference(WGPUAdapter handle);
+  static void wgpu_release(WGPUAdapter handle);
+};
+
+class BindGroup : public ObjectBase<BindGroup, WGPUBindGroup> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  void set_label(char const *label) const;
+
+private:
+  friend ObjectBase<BindGroup, WGPUBindGroup>;
+  static void wgpu_reference(WGPUBindGroup handle);
+  static void wgpu_release(WGPUBindGroup handle);
+};
+
+class BindGroupLayout
+    : public ObjectBase<BindGroupLayout, WGPUBindGroupLayout> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  void set_label(char const *label) const;
+
+private:
+  friend ObjectBase<BindGroupLayout, WGPUBindGroupLayout>;
+  static void wgpu_reference(WGPUBindGroupLayout handle);
+  static void wgpu_release(WGPUBindGroupLayout handle);
+};
+
+class Buffer : public ObjectBase<Buffer, WGPUBuffer> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  void destroy() const;
+  [[nodiscard]] auto
+  get_const_mapped_range(size_t offset = 0,
+                         size_t size = WGPU_WHOLE_MAP_SIZE) const
+      -> void const *;
+  [[nodiscard]] auto get_mapped_range(size_t offset = 0,
+                                      size_t size = WGPU_WHOLE_MAP_SIZE) const
+      -> void *;
+  [[nodiscard]] auto get_size() const -> uint64_t;
+  [[nodiscard]] auto get_usage() const -> BufferUsage;
+  void map_async(MapMode mode, size_t offset, size_t size,
+                 BufferMapCallback callback, void *userdata) const;
+  void set_label(char const *label) const;
+  void unmap() const;
+
+private:
+  friend ObjectBase<Buffer, WGPUBuffer>;
+  static void wgpu_reference(WGPUBuffer handle);
+  static void wgpu_release(WGPUBuffer handle);
+};
+
+class CommandBuffer : public ObjectBase<CommandBuffer, WGPUCommandBuffer> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  void set_label(char const *label) const;
+
+private:
+  friend ObjectBase<CommandBuffer, WGPUCommandBuffer>;
+  static void wgpu_reference(WGPUCommandBuffer handle);
+  static void wgpu_release(WGPUCommandBuffer handle);
+};
+
+class CommandEncoder : public ObjectBase<CommandEncoder, WGPUCommandEncoder> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  auto
+  begin_compute_pass(ComputePassDescriptor const *descriptor = nullptr) const
+      -> ComputePassEncoder;
+  auto begin_render_pass(RenderPassDescriptor const *descriptor) const
+      -> RenderPassEncoder;
+  void clear_buffer(Buffer const &buffer, uint64_t offset = 0,
+                    uint64_t size = WGPU_WHOLE_SIZE) const;
+  void copy_buffer_to_buffer(Buffer const &source, uint64_t source_offset,
+                             Buffer const &destination,
+                             uint64_t destination_offset, uint64_t size) const;
+  void copy_buffer_to_texture(ImageCopyBuffer const *source,
+                              ImageCopyTexture const *destination,
+                              Extent3D const *copy_size) const;
+  void copy_texture_to_buffer(ImageCopyTexture const *source,
+                              ImageCopyBuffer const *destination,
+                              Extent3D const *copy_size) const;
+  void copy_texture_to_texture(ImageCopyTexture const *source,
+                               ImageCopyTexture const *destination,
+                               Extent3D const *copy_size) const;
+  void copy_texture_to_texture_internal(ImageCopyTexture const *source,
+                                        ImageCopyTexture const *destination,
+                                        Extent3D const *copy_size) const;
+  auto finish(CommandBufferDescriptor const *descriptor = nullptr) const
+      -> CommandBuffer;
+  void inject_validation_error(char const *message) const;
+  void insert_debug_marker(char const *marker_label) const;
+  void pop_debug_group() const;
+  void push_debug_group(char const *group_label) const;
+  void resolve_query_set(QuerySet const &query_set, u32 first_query,
+                         u32 query_count, Buffer const &destination,
+                         uint64_t destination_offset) const;
+  void set_label(char const *label) const;
+  void write_buffer(Buffer const &buffer, uint64_t buffer_offset,
+                    uint8_t const *data, uint64_t size) const;
+  void write_timestamp(QuerySet const &query_set, u32 query_index) const;
+
+private:
+  friend ObjectBase<CommandEncoder, WGPUCommandEncoder>;
+  static void wgpu_reference(WGPUCommandEncoder handle);
+  static void wgpu_release(WGPUCommandEncoder handle);
+};
+
+class ComputePassEncoder
+    : public ObjectBase<ComputePassEncoder, WGPUComputePassEncoder> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  void dispatch(u32 workgroup_count_x, u32 workgroup_count_y = 1,
+                u32 workgroup_count_z = 1) const;
+  void dispatch_indirect(Buffer const &indirect_buffer,
+                         uint64_t indirect_offset) const;
+  void dispatch_workgroups(u32 workgroup_count_x, u32 workgroup_count_y = 1,
+                           u32 workgroup_count_z = 1) const;
+  void dispatch_workgroups_indirect(Buffer const &indirect_buffer,
+                                    uint64_t indirect_offset) const;
+  void end() const;
+  void end_pass() const;
+  void insert_debug_marker(char const *marker_label) const;
+  void pop_debug_group() const;
+  void push_debug_group(char const *group_label) const;
+  void set_bind_group(u32 group_index, BindGroup const &group,
+                      u32 dynamic_offset_count = 0,
+                      u32 const *dynamic_offsets = nullptr) const;
+  void set_label(char const *label) const;
+  void set_pipeline(ComputePipeline const &pipeline) const;
+  void write_timestamp(QuerySet const &query_set, u32 query_index) const;
+
+private:
+  friend ObjectBase<ComputePassEncoder, WGPUComputePassEncoder>;
+  static void wgpu_reference(WGPUComputePassEncoder handle);
+  static void wgpu_release(WGPUComputePassEncoder handle);
+};
+
+class ComputePipeline
+    : public ObjectBase<ComputePipeline, WGPUComputePipeline> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  [[nodiscard]] auto get_bind_group_layout(u32 group_index) const
+      -> BindGroupLayout;
+  void set_label(char const *label) const;
+
+private:
+  friend ObjectBase<ComputePipeline, WGPUComputePipeline>;
+  static void wgpu_reference(WGPUComputePipeline handle);
+  static void wgpu_release(WGPUComputePipeline handle);
+};
+
+class Device : public ObjectBase<Device, WGPUDevice> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  auto create_bind_group(BindGroupDescriptor const *descriptor) const
+      -> BindGroup;
+  auto
+  create_bind_group_layout(BindGroupLayoutDescriptor const *descriptor) const
+      -> BindGroupLayout;
+  auto create_buffer(BufferDescriptor const *descriptor) const -> Buffer;
+  auto create_command_encoder(CommandEncoderDescriptor const *descriptor =
+                                  nullptr) const -> CommandEncoder;
+  auto
+  create_compute_pipeline(ComputePipelineDescriptor const *descriptor) const
+      -> ComputePipeline;
+  void
+  create_compute_pipeline_async(ComputePipelineDescriptor const *descriptor,
+                                CreateComputePipelineAsyncCallback callback,
+                                void *userdata) const;
+  [[nodiscard]] auto create_error_buffer() const -> Buffer;
+  [[nodiscard]] auto create_error_external_texture() const -> ExternalTexture;
+  auto create_error_texture(TextureDescriptor const *descriptor) const
+      -> Texture;
+  auto create_external_texture(
+      ExternalTextureDescriptor const *external_texture_descriptor) const
+      -> ExternalTexture;
+  auto create_pipeline_layout(PipelineLayoutDescriptor const *descriptor) const
+      -> PipelineLayout;
+  auto create_query_set(QuerySetDescriptor const *descriptor) const -> QuerySet;
+  auto create_render_bundle_encoder(
+      RenderBundleEncoderDescriptor const *descriptor) const
+      -> RenderBundleEncoder;
+  auto create_render_pipeline(RenderPipelineDescriptor const *descriptor) const
+      -> RenderPipeline;
+  void create_render_pipeline_async(RenderPipelineDescriptor const *descriptor,
+                                    CreateRenderPipelineAsyncCallback callback,
+                                    void *userdata) const;
+  auto create_sampler(SamplerDescriptor const *descriptor = nullptr) const
+      -> Sampler;
+  auto create_shader_module(ShaderModuleDescriptor const *descriptor) const
+      -> ShaderModule;
+  auto create_swap_chain(Surface const &surface,
+                         SwapChainDescriptor const *descriptor) const
+      -> SwapChain;
+  auto create_texture(TextureDescriptor const *descriptor) const -> Texture;
+  void destroy() const;
+  auto enumerate_features(FeatureName *features) const -> size_t;
+  void force_loss(DeviceLostReason type, char const *message) const;
+  [[nodiscard]] auto get_adapter() const -> Adapter;
+  auto get_limits(SupportedLimits *limits) const -> bool;
+  [[nodiscard]] auto get_queue() const -> Queue;
+  [[nodiscard]] auto has_feature(FeatureName feature) const -> bool;
+  void inject_error(ErrorType type, char const *message) const;
+  auto pop_error_scope(ErrorCallback callback, void *userdata) const -> bool;
+  void push_error_scope(ErrorFilter filter) const;
+  void set_device_lost_callback(DeviceLostCallback callback,
+                                void *userdata) const;
+  void set_label(char const *label) const;
+  void set_logging_callback(LoggingCallback callback, void *userdata) const;
+  void set_uncaptured_error_callback(ErrorCallback callback,
+                                     void *userdata) const;
+  void tick() const;
+
+private:
+  friend ObjectBase<Device, WGPUDevice>;
+  static void wgpu_reference(WGPUDevice handle);
+  static void wgpu_release(WGPUDevice handle);
+};
+
+class ExternalTexture
+    : public ObjectBase<ExternalTexture, WGPUExternalTexture> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  void destroy() const;
+  void set_label(char const *label) const;
+
+private:
+  friend ObjectBase<ExternalTexture, WGPUExternalTexture>;
+  static void wgpu_reference(WGPUExternalTexture handle);
+  static void wgpu_release(WGPUExternalTexture handle);
+};
+
+class Instance : public ObjectBase<Instance, WGPUInstance> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  auto create_surface(SurfaceDescriptor const *descriptor) const -> Surface;
+  void request_adapter(RequestAdapterOptions const *options,
+                       RequestAdapterCallback callback, void *userdata) const;
+
+private:
+  friend ObjectBase<Instance, WGPUInstance>;
+  static void wgpu_reference(WGPUInstance handle);
+  static void wgpu_release(WGPUInstance handle);
+};
+
+class PipelineLayout : public ObjectBase<PipelineLayout, WGPUPipelineLayout> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  void set_label(char const *label) const;
+
+private:
+  friend ObjectBase<PipelineLayout, WGPUPipelineLayout>;
+  static void wgpu_reference(WGPUPipelineLayout handle);
+  static void wgpu_release(WGPUPipelineLayout handle);
+};
+
+class QuerySet : public ObjectBase<QuerySet, WGPUQuerySet> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  void destroy() const;
+  [[nodiscard]] auto get_count() const -> u32;
+  [[nodiscard]] auto get_type() const -> QueryType;
+  void set_label(char const *label) const;
+
+private:
+  friend ObjectBase<QuerySet, WGPUQuerySet>;
+  static void wgpu_reference(WGPUQuerySet handle);
+  static void wgpu_release(WGPUQuerySet handle);
+};
+
+class Queue : public ObjectBase<Queue, WGPUQueue> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  void
+  copy_texture_for_browser(ImageCopyTexture const *source,
+                           ImageCopyTexture const *destination,
+                           Extent3D const *copy_size,
+                           CopyTextureForBrowserOptions const *options) const;
+  void on_submitted_work_done(uint64_t signal_value,
+                              QueueWorkDoneCallback callback,
+                              void *userdata) const;
+  void set_label(char const *label) const;
+  void submit(u32 command_count, CommandBuffer const *commands) const;
+  void write_buffer(Buffer const &buffer, uint64_t buffer_offset,
+                    void const *data, size_t size) const;
+  void write_texture(ImageCopyTexture const *destination, void const *data,
+                     size_t data_size, TextureDataLayout const *data_layout,
+                     Extent3D const *write_size) const;
+
+private:
+  friend ObjectBase<Queue, WGPUQueue>;
+  static void wgpu_reference(WGPUQueue handle);
+  static void wgpu_release(WGPUQueue handle);
+};
+
+class RenderBundle : public ObjectBase<RenderBundle, WGPURenderBundle> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+private:
+  friend ObjectBase<RenderBundle, WGPURenderBundle>;
+  static void wgpu_reference(WGPURenderBundle handle);
+  static void wgpu_release(WGPURenderBundle handle);
+};
+
+class RenderBundleEncoder
+    : public ObjectBase<RenderBundleEncoder, WGPURenderBundleEncoder> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  void draw(u32 vertex_count, u32 instance_count = 1, u32 first_vertex = 0,
+            u32 first_instance = 0) const;
+  void draw_indexed(u32 index_count, u32 instance_count = 1,
+                    u32 first_index = 0, int32_t base_vertex = 0,
+                    u32 first_instance = 0) const;
+  void draw_indexed_indirect(Buffer const &indirect_buffer,
+                             uint64_t indirect_offset) const;
+  void draw_indirect(Buffer const &indirect_buffer,
+                     uint64_t indirect_offset) const;
+  auto finish(RenderBundleDescriptor const *descriptor = nullptr) const
+      -> RenderBundle;
+  void insert_debug_marker(char const *marker_label) const;
+  void pop_debug_group() const;
+  void push_debug_group(char const *group_label) const;
+  void set_bind_group(u32 group_index, BindGroup const &group,
+                      u32 dynamic_offset_count = 0,
+                      u32 const *dynamic_offsets = nullptr) const;
+  void set_index_buffer(Buffer const &buffer, IndexFormat format,
+                        uint64_t offset = 0,
+                        uint64_t size = WGPU_WHOLE_SIZE) const;
+  void set_label(char const *label) const;
+  void set_pipeline(RenderPipeline const &pipeline) const;
+  void set_vertex_buffer(u32 slot, Buffer const &buffer, uint64_t offset = 0,
+                         uint64_t size = WGPU_WHOLE_SIZE) const;
+
+private:
+  friend ObjectBase<RenderBundleEncoder, WGPURenderBundleEncoder>;
+  static void wgpu_reference(WGPURenderBundleEncoder handle);
+  static void wgpu_release(WGPURenderBundleEncoder handle);
+};
+
+class RenderPassEncoder
+    : public ObjectBase<RenderPassEncoder, WGPURenderPassEncoder> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  void begin_occlusion_query(u32 query_index) const;
+  void draw(u32 vertex_count, u32 instance_count = 1, u32 first_vertex = 0,
+            u32 first_instance = 0) const;
+  void draw_indexed(u32 index_count, u32 instance_count = 1,
+                    u32 first_index = 0, int32_t base_vertex = 0,
+                    u32 first_instance = 0) const;
+  void draw_indexed_indirect(Buffer const &indirect_buffer,
+                             uint64_t indirect_offset) const;
+  void draw_indirect(Buffer const &indirect_buffer,
+                     uint64_t indirect_offset) const;
+  void end() const;
+  void end_occlusion_query() const;
+  void end_pass() const;
+  void execute_bundles(u32 bundle_count, RenderBundle const *bundles) const;
+  void insert_debug_marker(char const *marker_label) const;
+  void pop_debug_group() const;
+  void push_debug_group(char const *group_label) const;
+  void set_bind_group(u32 group_index, BindGroup const &group,
+                      u32 dynamic_offset_count = 0,
+                      u32 const *dynamic_offsets = nullptr) const;
+  void set_blend_constant(Color const *color) const;
+  void set_index_buffer(Buffer const &buffer, IndexFormat format,
+                        uint64_t offset = 0,
+                        uint64_t size = WGPU_WHOLE_SIZE) const;
+  void set_label(char const *label) const;
+  void set_pipeline(RenderPipeline const &pipeline) const;
+  void set_scissor_rect(u32 x, u32 y, u32 width, u32 height) const;
+  void set_stencil_reference(u32 reference) const;
+  void set_vertex_buffer(u32 slot, Buffer const &buffer, uint64_t offset = 0,
+                         uint64_t size = WGPU_WHOLE_SIZE) const;
+  void set_viewport(float x, float y, float width, float height,
+                    float min_depth, float max_depth) const;
+  void write_timestamp(QuerySet const &query_set, u32 query_index) const;
+
+private:
+  friend ObjectBase<RenderPassEncoder, WGPURenderPassEncoder>;
+  static void wgpu_reference(WGPURenderPassEncoder handle);
+  static void wgpu_release(WGPURenderPassEncoder handle);
+};
+
+class RenderPipeline : public ObjectBase<RenderPipeline, WGPURenderPipeline> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  [[nodiscard]] auto get_bind_group_layout(u32 group_index) const
+      -> BindGroupLayout;
+  void set_label(char const *label) const;
+
+private:
+  friend ObjectBase<RenderPipeline, WGPURenderPipeline>;
+  static void wgpu_reference(WGPURenderPipeline handle);
+  static void wgpu_release(WGPURenderPipeline handle);
+};
+
+class Sampler : public ObjectBase<Sampler, WGPUSampler> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  void set_label(char const *label) const;
+
+private:
+  friend ObjectBase<Sampler, WGPUSampler>;
+  static void wgpu_reference(WGPUSampler handle);
+  static void wgpu_release(WGPUSampler handle);
+};
+
+class ShaderModule : public ObjectBase<ShaderModule, WGPUShaderModule> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  void get_compilation_info(CompilationInfoCallback callback,
+                            void *userdata) const;
+  void set_label(char const *label) const;
+
+private:
+  friend ObjectBase<ShaderModule, WGPUShaderModule>;
+  static void wgpu_reference(WGPUShaderModule handle);
+  static void wgpu_release(WGPUShaderModule handle);
+};
+
+class Surface : public ObjectBase<Surface, WGPUSurface> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+private:
+  friend ObjectBase<Surface, WGPUSurface>;
+  static void wgpu_reference(WGPUSurface handle);
+  static void wgpu_release(WGPUSurface handle);
+};
+
+class SwapChain : public ObjectBase<SwapChain, WGPUSwapChain> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  void configure(TextureFormat format, TextureUsage allowed_usage, u32 width,
+                 u32 height) const;
+  [[nodiscard]] auto get_current_texture_view() const -> TextureView;
+  void present() const;
+
+private:
+  friend ObjectBase<SwapChain, WGPUSwapChain>;
+  static void wgpu_reference(WGPUSwapChain handle);
+  static void wgpu_release(WGPUSwapChain handle);
+};
+
+class Texture : public ObjectBase<Texture, WGPUTexture> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  auto create_view(TextureViewDescriptor const *descriptor = nullptr) const
+      -> TextureView;
+  void destroy() const;
+  [[nodiscard]] auto get_depth_or_array_layers() const -> u32;
+  [[nodiscard]] auto get_dimension() const -> TextureDimension;
+  [[nodiscard]] auto get_format() const -> TextureFormat;
+  [[nodiscard]] auto get_height() const -> u32;
+  [[nodiscard]] auto get_mip_level_count() const -> u32;
+  [[nodiscard]] auto get_sample_count() const -> u32;
+  [[nodiscard]] auto get_usage() const -> TextureUsage;
+  [[nodiscard]] auto get_width() const -> u32;
+  void set_label(char const *label) const;
+
+private:
+  friend ObjectBase<Texture, WGPUTexture>;
+  static void wgpu_reference(WGPUTexture handle);
+  static void wgpu_release(WGPUTexture handle);
+};
+
+class TextureView : public ObjectBase<TextureView, WGPUTextureView> {
+public:
+  using ObjectBase::ObjectBase;
+  using ObjectBase::operator=;
+
+  void set_label(char const *label) const;
+
+private:
+  friend ObjectBase<TextureView, WGPUTextureView>;
+  static void wgpu_reference(WGPUTextureView handle);
+  static void wgpu_release(WGPUTextureView handle);
+};
+
+MOON_API auto CreateInstance(InstanceDescriptor const *descriptor = nullptr)
+    -> Instance;
+MOON_API auto GetProcAddress(Device device, char const *proc_name) -> Proc;
+
 struct ChainedStruct {
-  struct ChainedStruct const *next;
-  s_type s_type;
+  ChainedStruct const *nextInChain = nullptr;
+  SType sType = SType::Invalid;
 };
 
 struct ChainedStructOut {
-  struct ChainedStructOut *next;
-  s_type s_type;
+  ChainedStruct *nextInChain = nullptr;
+  SType sType = SType::Invalid;
 };
 
 struct AdapterProperties {
-  ChainedStructOut *next_in_chain;
-  u32 vendor_id;
-  zinc::string_view vendor_name;
-  zinc::string_view architecture;
-  u32 device_id;
-  zinc::string_view name;
-  zinc::string_view driver_description;
-  AdapterType adapter_type;
-  BackendType backend_type;
+  ChainedStructOut *nextInChain = nullptr;
+  u32 vendorID;
+  char const *vendorName;
+  char const *architecture;
+  u32 deviceID;
+  char const *name;
+  char const *driverDescription;
+  AdapterType adapterType;
+  BackendType backendType;
 };
 
 struct BindGroupEntry {
-  ChainedStruct const *next_in_chain;
+  ChainedStruct const *nextInChain = nullptr;
   u32 binding;
-  Buffer buffer; // nullable
-  u64 offset;
-  u64 size;
-  Sampler sampler;          // nullable
-  TextureView texture_view; // nullable
+  Buffer buffer = nullptr;
+  uint64_t offset = 0;
+  uint64_t size = WGPU_WHOLE_SIZE;
+  Sampler sampler = nullptr;
+  TextureView textureView = nullptr;
 };
 
 struct BlendComponent {
-  BlendOperation operation;
-  BlendFactor src_factor;
-  BlendFactor dst_factor;
+  BlendOperation operation = BlendOperation::Add;
+  BlendFactor srcFactor = BlendFactor::One;
+  BlendFactor dstFactor = BlendFactor::Zero;
 };
 
 struct BufferBindingLayout {
-  ChainedStruct const *next_in_chain;
-  BufferBindingType type;
-  bool has_dynamic_offset;
-  u64 min_binding_size;
+  ChainedStruct const *nextInChain = nullptr;
+  BufferBindingType type = BufferBindingType::Undefined;
+  bool hasDynamicOffset = false;
+  uint64_t minBindingSize = 0;
 };
 
 struct BufferDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
-  BufferUsageFlags usage;
-  u64 size;
-  bool mapped_at_creation;
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
+  BufferUsage usage;
+  uint64_t size;
+  bool mappedAtCreation = false;
 };
 
 struct Color {
@@ -650,337 +1445,485 @@ struct Color {
 };
 
 struct CommandBufferDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
 };
 
 struct CommandEncoderDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
 };
 
 struct CompilationMessage {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view message; // nullable
+  ChainedStruct const *nextInChain = nullptr;
+  char const *message = nullptr;
   CompilationMessageType type;
-  u64 line_num;
-  u64 line_pos;
-  u64 offset;
-  u64 length;
+  uint64_t lineNum;
+  uint64_t linePos;
+  uint64_t offset;
+  uint64_t length;
 };
 
 struct ComputePassTimestampWrite {
-  QuerySet query_set;
-  u32 query_index;
+  QuerySet querySet;
+  u32 queryIndex;
   ComputePassTimestampLocation location;
 };
 
 struct ConstantEntry {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view key;
+  ChainedStruct const *nextInChain = nullptr;
+  char const *key;
   double value;
+};
+
+struct CopyTextureForBrowserOptions {
+  ChainedStruct const *nextInChain = nullptr;
+  bool flipY = false;
+  bool needsColorSpaceConversion = false;
+  AlphaMode srcAlphaMode = AlphaMode::Unpremultiplied;
+  float const *srcTransferFunctionParameters = nullptr;
+  float const *conversionMatrix = nullptr;
+  float const *dstTransferFunctionParameters = nullptr;
+  AlphaMode dstAlphaMode = AlphaMode::Unpremultiplied;
+  bool internalUsage = false;
+};
+
+// Can be chained in AdapterProperties
+struct MoonAdapterPropertiesPowerPreference : ChainedStructOut {
+  MoonAdapterPropertiesPowerPreference() {
+    sType = SType::MoonAdapterPropertiesPowerPreference;
+  }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(PowerPreference));
+  alignas(kFirstMemberAlignment)
+      PowerPreference powerPreference = PowerPreference::Undefined;
+};
+
+// Can be chained in DeviceDescriptor
+struct MoonCacheDeviceDescriptor : ChainedStruct {
+  MoonCacheDeviceDescriptor() { sType = SType::MoonCacheDeviceDescriptor; }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(char const *));
+  alignas(kFirstMemberAlignment) char const *isolationKey = "";
+};
+
+// Can be chained in CommandEncoderDescriptor
+struct MoonEncoderInternalUsageDescriptor : ChainedStruct {
+  MoonEncoderInternalUsageDescriptor() {
+    sType = SType::MoonEncoderInternalUsageDescriptor;
+  }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(bool));
+  alignas(kFirstMemberAlignment) bool useInternalUsages = false;
+};
+
+// Can be chained in InstanceDescriptor
+struct MoonInstanceDescriptor : ChainedStruct {
+  MoonInstanceDescriptor() { sType = SType::MoonInstanceDescriptor; }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(u32));
+  alignas(kFirstMemberAlignment) u32 additionalRuntimeSearchPathsCount = 0;
+  const char *const *additionalRuntimeSearchPaths;
+};
+
+// Can be chained in TextureDescriptor
+struct MoonTextureInternalUsageDescriptor : ChainedStruct {
+  MoonTextureInternalUsageDescriptor() {
+    sType = SType::MoonTextureInternalUsageDescriptor;
+  }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(TextureUsage));
+  alignas(kFirstMemberAlignment)
+      TextureUsage internalUsage = TextureUsage::None;
+};
+
+// Can be chained in DeviceDescriptor
+struct MoonTogglesDeviceDescriptor : ChainedStruct {
+  MoonTogglesDeviceDescriptor() { sType = SType::MoonTogglesDeviceDescriptor; }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(u32));
+  alignas(kFirstMemberAlignment) u32 forceEnabledTogglesCount = 0;
+  const char *const *forceEnabledToggles;
+  u32 forceDisabledTogglesCount = 0;
+  const char *const *forceDisabledToggles;
 };
 
 struct Extent3D {
   u32 width;
-  u32 height;
-  u32 depth_or_array_layers;
+  u32 height = 1;
+  u32 depthOrArrayLayers = 1;
+};
+
+// Can be chained in BindGroupEntry
+struct ExternalTextureBindingEntry : ChainedStruct {
+  ExternalTextureBindingEntry() { sType = SType::ExternalTextureBindingEntry; }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(ExternalTexture));
+  alignas(kFirstMemberAlignment) ExternalTexture externalTexture;
+};
+
+// Can be chained in BindGroupLayoutEntry
+struct ExternalTextureBindingLayout : ChainedStruct {
+  ExternalTextureBindingLayout() {
+    sType = SType::ExternalTextureBindingLayout;
+  }
+};
+
+struct ExternalTextureDescriptor {
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
+  TextureView plane0;
+  TextureView plane1 = nullptr;
+  bool doYuvToRgbConversionOnly = false;
+  float const *yuvToRgbConversionMatrix = nullptr;
+  float const *srcTransferFunctionParameters;
+  float const *dstTransferFunctionParameters;
+  float const *gamutConversionMatrix;
 };
 
 struct InstanceDescriptor {
-  ChainedStruct const *next_in_chain;
+  ChainedStruct const *nextInChain = nullptr;
 };
 
 struct Limits {
-  u32 max_texture_dimension_1d;
-  u32 max_texture_dimension_2d;
-  u32 max_texture_dimension3_d;
-  u32 max_texture_array_layers;
-  u32 max_bind_groups;
-  u32 max_bindings_per_bind_group;
-  u32 max_dynamic_uniform_buffers_per_pipeline_layout;
-  u32 max_dynamic_storage_buffers_per_pipeline_layout;
-  u32 max_sampled_textures_per_shader_stage;
-  u32 max_samplers_per_shader_stage;
-  u32 max_storage_buffers_per_shader_stage;
-  u32 max_storage_textures_per_shader_stage;
-  u32 max_uniform_buffers_per_shader_stage;
-  u64 max_uniform_buffer_binding_size;
-  u64 max_storage_buffer_binding_size;
-  u32 min_uniform_buffer_offset_alignment;
-  u32 min_storage_buffer_offset_alignment;
-  u32 max_vertex_buffers;
-  u64 max_buffer_size;
-  u32 max_vertex_attributes;
-  u32 max_vertex_buffer_array_stride;
-  u32 max_inter_stage_shader_components;
-  u32 max_inter_stage_shader_variables;
-  u32 max_color_attachments;
-  u32 max_compute_workgroup_storage_size;
-  u32 max_compute_invocations_per_workgroup;
-  u32 max_compute_workgroup_size_x;
-  u32 max_compute_workgroup_size_y;
-  u32 max_compute_workgroup_size_z;
-  u32 max_compute_workgroups_per_dimension;
+  u32 maxTextureDimension1D = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxTextureDimension2D = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxTextureDimension3D = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxTextureArrayLayers = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxBindGroups = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxBindingsPerBindGroup = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxDynamicUniformBuffersPerPipelineLayout = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxDynamicStorageBuffersPerPipelineLayout = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxSampledTexturesPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxSamplersPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxStorageBuffersPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxStorageTexturesPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxUniformBuffersPerShaderStage = WGPU_LIMIT_U32_UNDEFINED;
+  uint64_t maxUniformBufferBindingSize = WGPU_LIMIT_U64_UNDEFINED;
+  uint64_t maxStorageBufferBindingSize = WGPU_LIMIT_U64_UNDEFINED;
+  u32 minUniformBufferOffsetAlignment = WGPU_LIMIT_U32_UNDEFINED;
+  u32 minStorageBufferOffsetAlignment = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxVertexBuffers = WGPU_LIMIT_U32_UNDEFINED;
+  uint64_t maxBufferSize = WGPU_LIMIT_U64_UNDEFINED;
+  u32 maxVertexAttributes = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxVertexBufferArrayStride = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxInterStageShaderComponents = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxInterStageShaderVariables = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxColorAttachments = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxComputeWorkgroupStorageSize = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxComputeInvocationsPerWorkgroup = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxComputeWorkgroupSizeX = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxComputeWorkgroupSizeY = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxComputeWorkgroupSizeZ = WGPU_LIMIT_U32_UNDEFINED;
+  u32 maxComputeWorkgroupsPerDimension = WGPU_LIMIT_U32_UNDEFINED;
 };
 
 struct MultisampleState {
-  ChainedStruct const *next_in_chain;
-  u32 count;
-  u32 mask;
-  bool alpha_to_coverage_enabled;
+  ChainedStruct const *nextInChain = nullptr;
+  u32 count = 1;
+  u32 mask = 0xFFFFFFFF;
+  bool alphaToCoverageEnabled = false;
 };
 
 struct Origin3D {
-  u32 x;
-  u32 y;
-  u32 z;
+  u32 x = 0;
+  u32 y = 0;
+  u32 z = 0;
 };
 
 struct PipelineLayoutDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
-  u32 bind_group_layout_count;
-  zinc::array_view<BindGroupLayout> bind_group_layouts;
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
+  u32 bindGroupLayoutCount;
+  BindGroupLayout const *bindGroupLayouts;
 };
 
 // Can be chained in PrimitiveState
-struct PrimitiveDepthClipControl {
-  ChainedStruct chain;
-  bool unclipped_depth;
+struct PrimitiveDepthClipControl : ChainedStruct {
+  PrimitiveDepthClipControl() { sType = SType::PrimitiveDepthClipControl; }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(bool));
+  alignas(kFirstMemberAlignment) bool unclippedDepth = false;
 };
 
 struct PrimitiveState {
-  ChainedStruct const *next_in_chain;
-  PrimitiveTopology topology;
-  IndexFormat strip_index_format;
-  FrontFace front_face;
-  CullMode cull_mode;
+  ChainedStruct const *nextInChain = nullptr;
+  PrimitiveTopology topology = PrimitiveTopology::TriangleList;
+  IndexFormat stripIndexFormat = IndexFormat::Undefined;
+  FrontFace frontFace = FrontFace::CCW;
+  CullMode cullMode = CullMode::None;
 };
 
 struct QuerySetDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
   QueryType type;
   u32 count;
-  zinc::array_view<PipelineStatisticName> pipeline_statistics;
-  u32 pipeline_statistics_count;
+  PipelineStatisticName const *pipelineStatistics;
+  u32 pipelineStatisticsCount = 0;
 };
 
 struct QueueDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
 };
 
 struct RenderBundleDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
 };
 
 struct RenderBundleEncoderDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
-  u32 color_formats_count;
-  zinc::array_view<TextureFormat> color_formats;
-  TextureFormat depth_stencil_format;
-  u32 sample_count;
-  bool depth_read_only;
-  bool stencil_read_only;
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
+  u32 colorFormatsCount;
+  TextureFormat const *colorFormats;
+  TextureFormat depthStencilFormat = TextureFormat::Undefined;
+  u32 sampleCount = 1;
+  bool depthReadOnly = false;
+  bool stencilReadOnly = false;
 };
 
 struct RenderPassDepthStencilAttachment {
   TextureView view;
-  LoadOp depth_load_op;
-  StoreOp depth_store_op;
-  float depth_clear_value;
-  bool depth_read_only;
-  LoadOp stencil_load_op;
-  StoreOp stencil_store_op;
-  u32 stencil_clear_value;
-  bool stencil_read_only;
+  LoadOp depthLoadOp = LoadOp::Undefined;
+  StoreOp depthStoreOp = StoreOp::Undefined;
+  float clearDepth = NAN;
+  float depthClearValue = 0;
+  bool depthReadOnly = false;
+  LoadOp stencilLoadOp = LoadOp::Undefined;
+  StoreOp stencilStoreOp = StoreOp::Undefined;
+  u32 clearStencil = 0;
+  u32 stencilClearValue = 0;
+  bool stencilReadOnly = false;
 };
 
 // Can be chained in RenderPassDescriptor
-struct RenderPassDescriptorMaxDrawCount {
-  ChainedStruct chain;
-  u64 max_draw_count;
+struct RenderPassDescriptorMaxDrawCount : ChainedStruct {
+  RenderPassDescriptorMaxDrawCount() {
+    sType = SType::RenderPassDescriptorMaxDrawCount;
+  }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(uint64_t));
+  alignas(kFirstMemberAlignment) uint64_t maxDrawCount = 50000000;
 };
 
 struct RenderPassTimestampWrite {
-  QuerySet query_set;
-  u32 query_index;
+  QuerySet querySet;
+  u32 queryIndex;
   RenderPassTimestampLocation location;
 };
 
 struct RequestAdapterOptions {
-  ChainedStruct const *next_in_chain;
-  Surface compatible_surface; // nullable
-  PowerPreference power_preference;
-  bool force_fallback_adapter;
+  ChainedStruct const *nextInChain = nullptr;
+  Surface compatibleSurface = nullptr;
+  PowerPreference powerPreference = PowerPreference::Undefined;
+  bool forceFallbackAdapter = false;
 };
 
 struct SamplerBindingLayout {
-  ChainedStruct const *next_in_chain;
-  SamplerBindingType type;
+  ChainedStruct const *nextInChain = nullptr;
+  SamplerBindingType type = SamplerBindingType::Undefined;
 };
 
 struct SamplerDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
-  AddressMode address_mode_u;
-  AddressMode address_mode_v;
-  AddressMode address_mode_w;
-  FilterMode mag_filter;
-  FilterMode min_filter;
-  MipmapFilterMode mipmap_filter;
-  float lod_min_clamp;
-  float lod_max_clamp;
-  CompareFunction compare;
-  u16 max_anisotropy;
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
+  AddressMode addressModeU = AddressMode::ClampToEdge;
+  AddressMode addressModeV = AddressMode::ClampToEdge;
+  AddressMode addressModeW = AddressMode::ClampToEdge;
+  FilterMode magFilter = FilterMode::Nearest;
+  FilterMode minFilter = FilterMode::Nearest;
+  FilterMode mipmapFilter = FilterMode::Nearest;
+  float lodMinClamp = 0.0f;
+  float lodMaxClamp = 1000.0f;
+  CompareFunction compare = CompareFunction::Undefined;
+  uint16_t maxAnisotropy = 1;
 };
 
-struct ShaderModuleCompilationHint {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view entry_point;
-  PipelineLayout layout;
+struct ShaderModuleDescriptor {
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
 };
 
 // Can be chained in ShaderModuleDescriptor
-struct ShaderModuleSPIRVDescriptor {
-  ChainedStruct chain;
-  u32 code_size;
+struct ShaderModuleSPIRVDescriptor : ChainedStruct {
+  ShaderModuleSPIRVDescriptor() { sType = SType::ShaderModuleSPIRVDescriptor; }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(u32));
+  alignas(kFirstMemberAlignment) u32 codeSize;
   u32 const *code;
 };
 
 // Can be chained in ShaderModuleDescriptor
-struct ShaderModuleWGSLDescriptor {
-  ChainedStruct chain;
-  zinc::string_view code;
+struct ShaderModuleWGSLDescriptor : ChainedStruct {
+  ShaderModuleWGSLDescriptor() { sType = SType::ShaderModuleWGSLDescriptor; }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(char const *));
+  alignas(kFirstMemberAlignment) char const *source;
 };
 
 struct StencilFaceState {
-  CompareFunction compare;
-  StencilOperation fail_op;
-  StencilOperation depth_fail_op;
-  StencilOperation pass_op;
+  CompareFunction compare = CompareFunction::Always;
+  StencilOperation failOp = StencilOperation::Keep;
+  StencilOperation depthFailOp = StencilOperation::Keep;
+  StencilOperation passOp = StencilOperation::Keep;
 };
 
 struct StorageTextureBindingLayout {
-  ChainedStruct const *next_in_chain;
-  StorageTextureAccess access;
-  TextureFormat format;
-  TextureViewDimension view_dimension;
+  ChainedStruct const *nextInChain = nullptr;
+  StorageTextureAccess access = StorageTextureAccess::Undefined;
+  TextureFormat format = TextureFormat::Undefined;
+  TextureViewDimension viewDimension = TextureViewDimension::Undefined;
 };
 
 struct SurfaceDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
 };
 
 // Can be chained in SurfaceDescriptor
-struct SurfaceDescriptorFromAndroidNativeWindow {
-  ChainedStruct chain;
-  vptr window;
+struct SurfaceDescriptorFromAndroidNativeWindow : ChainedStruct {
+  SurfaceDescriptorFromAndroidNativeWindow() {
+    sType = SType::SurfaceDescriptorFromAndroidNativeWindow;
+  }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(void *));
+  alignas(kFirstMemberAlignment) void *window;
 };
 
 // Can be chained in SurfaceDescriptor
-struct SurfaceDescriptorFromCanvasHTMLSelector {
-  ChainedStruct chain;
-  zinc::string_view selector;
+struct SurfaceDescriptorFromCanvasHTMLSelector : ChainedStruct {
+  SurfaceDescriptorFromCanvasHTMLSelector() {
+    sType = SType::SurfaceDescriptorFromCanvasHTMLSelector;
+  }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(char const *));
+  alignas(kFirstMemberAlignment) char const *selector;
 };
 
 // Can be chained in SurfaceDescriptor
-struct SurfaceDescriptorFromMetalLayer {
-  ChainedStruct chain;
-  vptr layer;
+struct SurfaceDescriptorFromMetalLayer : ChainedStruct {
+  SurfaceDescriptorFromMetalLayer() {
+    sType = SType::SurfaceDescriptorFromMetalLayer;
+  }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(void *));
+  alignas(kFirstMemberAlignment) void *layer;
 };
 
 // Can be chained in SurfaceDescriptor
-struct SurfaceDescriptorFromWaylandSurface {
-  ChainedStruct chain;
-  vptr display;
-  vptr surface;
+struct SurfaceDescriptorFromWaylandSurface : ChainedStruct {
+  SurfaceDescriptorFromWaylandSurface() {
+    sType = SType::SurfaceDescriptorFromWaylandSurface;
+  }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(void *));
+  alignas(kFirstMemberAlignment) void *display;
+  void *surface;
 };
 
 // Can be chained in SurfaceDescriptor
-struct SurfaceDescriptorFromWindowsHWND {
-  ChainedStruct chain;
-  vptr hinstance;
-  vptr hwnd;
+struct SurfaceDescriptorFromWindowsCoreWindow : ChainedStruct {
+  SurfaceDescriptorFromWindowsCoreWindow() {
+    sType = SType::SurfaceDescriptorFromWindowsCoreWindow;
+  }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(void *));
+  alignas(kFirstMemberAlignment) void *coreWindow;
 };
 
 // Can be chained in SurfaceDescriptor
-struct SurfaceDescriptorFromXcbWindow {
-  ChainedStruct chain;
-  vptr connection;
-  u32 window;
+struct SurfaceDescriptorFromWindowsHWND : ChainedStruct {
+  SurfaceDescriptorFromWindowsHWND() {
+    sType = SType::SurfaceDescriptorFromWindowsHWND;
+  }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(void *));
+  alignas(kFirstMemberAlignment) void *hinstance;
+  void *hwnd;
 };
 
 // Can be chained in SurfaceDescriptor
-struct SurfaceDescriptorFromXlibWindow {
-  ChainedStruct chain;
-  vptr display;
+struct SurfaceDescriptorFromWindowsSwapChainPanel : ChainedStruct {
+  SurfaceDescriptorFromWindowsSwapChainPanel() {
+    sType = SType::SurfaceDescriptorFromWindowsSwapChainPanel;
+  }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(void *));
+  alignas(kFirstMemberAlignment) void *swapChainPanel;
+};
+
+// Can be chained in SurfaceDescriptor
+struct SurfaceDescriptorFromXlibWindow : ChainedStruct {
+  SurfaceDescriptorFromXlibWindow() {
+    sType = SType::SurfaceDescriptorFromXlibWindow;
+  }
+  static constexpr size_t kFirstMemberAlignment =
+      detail::ConstexprMax(alignof(ChainedStruct), alignof(void *));
+  alignas(kFirstMemberAlignment) void *display;
   u32 window;
 };
 
 struct SwapChainDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
-  TextureUsageFlags usage;
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
+  TextureUsage usage;
   TextureFormat format;
   u32 width;
   u32 height;
-  PresentMode present_mode;
+  PresentMode presentMode;
+  uint64_t implementation = 0;
 };
 
 struct TextureBindingLayout {
-  ChainedStruct const *next_in_chain;
-  TextureSampleType sample_type;
-  TextureViewDimension view_dimension;
-  bool multisampled;
+  ChainedStruct const *nextInChain = nullptr;
+  TextureSampleType sampleType = TextureSampleType::Undefined;
+  TextureViewDimension viewDimension = TextureViewDimension::Undefined;
+  bool multisampled = false;
 };
 
 struct TextureDataLayout {
-  ChainedStruct const *next_in_chain;
-  u64 offset;
-  u32 bytes_per_row;
-  u32 rows_per_image;
+  ChainedStruct const *nextInChain = nullptr;
+  uint64_t offset = 0;
+  u32 bytesPerRow = WGPU_COPY_STRIDE_UNDEFINED;
+  u32 rowsPerImage = WGPU_COPY_STRIDE_UNDEFINED;
 };
 
 struct TextureViewDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
-  TextureFormat format;
-  TextureViewDimension dimension;
-  u32 base_mip_level;
-  u32 mip_level_count;
-  u32 base_array_layer;
-  u32 array_layer_count;
-  TextureAspect aspect;
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
+  TextureFormat format = TextureFormat::Undefined;
+  TextureViewDimension dimension = TextureViewDimension::Undefined;
+  u32 baseMipLevel = 0;
+  u32 mipLevelCount = WGPU_MIP_LEVEL_COUNT_UNDEFINED;
+  u32 baseArrayLayer = 0;
+  u32 arrayLayerCount = WGPU_ARRAY_LAYER_COUNT_UNDEFINED;
+  TextureAspect aspect = TextureAspect::All;
 };
 
 struct VertexAttribute {
   VertexFormat format;
-  u64 offset;
-  u32 shader_location;
+  uint64_t offset;
+  u32 shaderLocation;
 };
 
 struct BindGroupDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
   BindGroupLayout layout;
-  u32 entry_count;
-  zinc::array_view<BindGroupEntry> entries;
+  u32 entryCount;
+  BindGroupEntry const *entries;
 };
 
 struct BindGroupLayoutEntry {
-  ChainedStruct const *next_in_chain;
+  ChainedStruct const *nextInChain = nullptr;
   u32 binding;
-  ShaderStageFlags visibility;
+  ShaderStage visibility;
   BufferBindingLayout buffer;
   SamplerBindingLayout sampler;
   TextureBindingLayout texture;
-  StorageTextureBindingLayout storage_texture;
+  StorageTextureBindingLayout storageTexture;
 };
 
 struct BlendState {
@@ -989,900 +1932,440 @@ struct BlendState {
 };
 
 struct CompilationInfo {
-  ChainedStruct const *next_in_chain;
-  u32 message_count;
-  zinc::array_view<CompilationMessage> messages;
+  ChainedStruct const *nextInChain = nullptr;
+  u32 messageCount;
+  CompilationMessage const *messages;
 };
 
 struct ComputePassDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
-  u32 timestamp_write_count;
-  zinc::array_view<ComputePassTimestampWrite> timestamp_writes;
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
+  u32 timestampWriteCount = 0;
+  ComputePassTimestampWrite const *timestampWrites;
 };
 
 struct DepthStencilState {
-  ChainedStruct const *next_in_chain;
+  ChainedStruct const *nextInChain = nullptr;
   TextureFormat format;
-  bool depth_write_enabled;
-  CompareFunction depth_compare;
-  StencilFaceState stencil_front;
-  StencilFaceState stencil_back;
-  u32 stencil_read_mask;
-  u32 stencil_write_mask;
-  i32 depth_bias;
-  float depth_bias_slope_scale;
-  float depth_bias_clamp;
+  bool depthWriteEnabled = false;
+  CompareFunction depthCompare = CompareFunction::Always;
+  StencilFaceState stencilFront;
+  StencilFaceState stencilBack;
+  u32 stencilReadMask = 0xFFFFFFFF;
+  u32 stencilWriteMask = 0xFFFFFFFF;
+  int32_t depthBias = 0;
+  float depthBiasSlopeScale = 0.0f;
+  float depthBiasClamp = 0.0f;
 };
 
 struct ImageCopyBuffer {
-  ChainedStruct const *next_in_chain;
+  ChainedStruct const *nextInChain = nullptr;
   TextureDataLayout layout;
   Buffer buffer;
 };
 
 struct ImageCopyTexture {
-  ChainedStruct const *next_in_chain;
+  ChainedStruct const *nextInChain = nullptr;
   Texture texture;
-  u32 mip_level;
+  u32 mipLevel = 0;
   Origin3D origin;
-  TextureAspect aspect;
+  TextureAspect aspect = TextureAspect::All;
 };
 
 struct ProgrammableStageDescriptor {
-  ChainedStruct const *next_in_chain;
+  ChainedStruct const *nextInChain = nullptr;
   ShaderModule module;
-  zinc::string_view entry_point;
-  u32 constant_count;
-  zinc::array_view<ConstantEntry> constants;
+  char const *entryPoint;
+  u32 constantCount = 0;
+  ConstantEntry const *constants;
 };
 
 struct RenderPassColorAttachment {
-  TextureView view;           // nullable
-  TextureView resolve_target; // nullable
-  LoadOp load_op;
-  StoreOp store_op;
-  Color clear_value;
+  TextureView view = nullptr;
+  TextureView resolveTarget = nullptr;
+  LoadOp loadOp;
+  StoreOp storeOp;
+  Color clearColor = {NAN, NAN, NAN, NAN};
+  Color clearValue;
 };
 
 struct RequiredLimits {
-  ChainedStruct const *next_in_chain;
+  ChainedStruct const *nextInChain = nullptr;
   Limits limits;
 };
 
-struct ShaderModuleDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
-  u32 hint_count;
-  zinc::array_view<ShaderModuleCompilationHint> hints;
-};
-
 struct SupportedLimits {
-  ChainedStructOut *next_in_chain;
+  ChainedStructOut *nextInChain = nullptr;
   Limits limits;
 };
 
 struct TextureDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
-  TextureUsageFlags usage;
-  TextureDimension dimension;
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
+  TextureUsage usage;
+  TextureDimension dimension = TextureDimension::e2D;
   Extent3D size;
   TextureFormat format;
-  u32 mip_level_count;
-  u32 sample_count;
-  u32 view_format_count;
-  zinc::array_view<TextureFormat> view_formats;
+  u32 mipLevelCount = 1;
+  u32 sampleCount = 1;
+  u32 viewFormatCount = 0;
+  TextureFormat const *viewFormats;
 };
 
 struct VertexBufferLayout {
-  u64 array_stride;
-  VertexStepMode step_mode;
-  u32 attribute_count;
-  zinc::array_view<VertexAttribute> attributes;
+  uint64_t arrayStride;
+  VertexStepMode stepMode = VertexStepMode::Vertex;
+  u32 attributeCount;
+  VertexAttribute const *attributes;
 };
 
 struct BindGroupLayoutDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
-  u32 entry_count;
-  zinc::array_view<BindGroupLayoutEntry> entries;
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
+  u32 entryCount;
+  BindGroupLayoutEntry const *entries;
 };
 
 struct ColorTargetState {
-  ChainedStruct const *next_in_chain;
+  ChainedStruct const *nextInChain = nullptr;
   TextureFormat format;
-  zinc::array_view<BlendState> blend; // nullable
-  ColorWriteMaskFlags write_mask;
+  BlendState const *blend = nullptr;
+  ColorWriteMask writeMask = ColorWriteMask::All;
 };
 
 struct ComputePipelineDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
-  PipelineLayout layout;   // nullable
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
+  PipelineLayout layout = nullptr;
   ProgrammableStageDescriptor compute;
 };
 
 struct DeviceDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
-  u32 required_features_count;
-  zinc::array_view<FeatureName> required_features;
-  zinc::array_view<RequiredLimits> required_limits; // nullable
-  QueueDescriptor default_queue;
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
+  u32 requiredFeaturesCount = 0;
+  FeatureName const *requiredFeatures = nullptr;
+  RequiredLimits const *requiredLimits = nullptr;
+  QueueDescriptor defaultQueue;
 };
 
 struct RenderPassDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
-  u32 color_attachment_count;
-  zinc::array_view<RenderPassColorAttachment> color_attachments;
-  zinc::array_view<RenderPassDepthStencilAttachment>
-      depth_stencil_attachment; // nullable
-  QuerySet occlusion_query_set; // nullable
-  u32 timestamp_write_count;
-  zinc::array_view<RenderPassTimestampWrite> timestamp_writes;
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
+  u32 colorAttachmentCount;
+  RenderPassColorAttachment const *colorAttachments;
+  RenderPassDepthStencilAttachment const *depthStencilAttachment = nullptr;
+  QuerySet occlusionQuerySet = nullptr;
+  u32 timestampWriteCount = 0;
+  RenderPassTimestampWrite const *timestampWrites;
 };
 
 struct VertexState {
-  ChainedStruct const *next_in_chain;
+  ChainedStruct const *nextInChain = nullptr;
   ShaderModule module;
-  zinc::string_view entry_point;
-  u32 constant_count;
-  zinc::array_view<ConstantEntry> constants;
-  u32 buffer_count;
-  zinc::array_view<VertexBufferLayout> buffers;
+  char const *entryPoint;
+  u32 constantCount = 0;
+  ConstantEntry const *constants;
+  u32 bufferCount = 0;
+  VertexBufferLayout const *buffers;
 };
 
 struct FragmentState {
-  ChainedStruct const *next_in_chain;
+  ChainedStruct const *nextInChain = nullptr;
   ShaderModule module;
-  zinc::string_view entry_point;
-  u32 constant_count;
-  zinc::array_view<ConstantEntry> constants;
-  u32 target_count;
-  zinc::array_view<ColorTargetState> targets;
+  char const *entryPoint;
+  u32 constantCount = 0;
+  ConstantEntry const *constants;
+  u32 targetCount;
+  ColorTargetState const *targets;
 };
 
 struct RenderPipelineDescriptor {
-  ChainedStruct const *next_in_chain;
-  zinc::string_view label; // nullable
-  PipelineLayout layout;   // nullable
+  ChainedStruct const *nextInChain = nullptr;
+  char const *label = nullptr;
+  PipelineLayout layout = nullptr;
   VertexState vertex;
   PrimitiveState primitive;
-  zinc::array_view<DepthStencilState> depth_stencil; // nullable
+  DepthStencilState const *depthStencil = nullptr;
   MultisampleState multisample;
-  zinc::array_view<FragmentState> fragment; // nullable
+  FragmentState const *fragment = nullptr;
 };
 
-// Procedures
+template <> struct IsMoonBitmask<BufferUsage> {
+  static constexpr bool enable = true;
+};
 
-using BufferMapCallback = void (*)(BufferMapAsyncStatus status, void *userdata);
-using CompilationInfoCallback =
-    void (*)(CompilationInfoRequestStatus status,
-             zinc::array_view<CompilationInfo> compilationInfo, void *userdata);
-using CreateComputePipelineAsyncCallback =
-    void (*)(CreatePipelineAsyncStatus status, ComputePipeline pipeline,
-             zinc::string_view message, void *userdata);
-using CreateRenderPipelineAsyncCallback =
-    void (*)(CreatePipelineAsyncStatus status, RenderPipeline pipeline,
-             zinc::string_view message, void *userdata);
-using DeviceLostCallback = void (*)(DeviceLostReason reason,
-                                    zinc::string_view message, void *userdata);
-using ErrorCallback = void (*)(ErrorType type, zinc::string_view message,
-                               void *userdata);
-using Proc = void (*)();
-using QueueWorkDoneCallback = void (*)(QueueWorkDoneStatus status,
-                                       void *userdata);
-using RequestAdapterCallback = void (*)(RequestAdapterStatus status,
-                                        Adapter adapter,
-                                        zinc::string_view message,
-                                        void *userdata);
-using RequestDeviceCallback = void (*)(RequestDeviceStatus status,
-                                       Device device, zinc::string_view message,
-                                       void *userdata);
+template <> struct IsMoonBitmask<ColorWriteMask> {
+  static constexpr bool enable = true;
+};
 
-using ProcCreateInstance = Instance (*)(InstanceDescriptor const *descriptor);
-using ProcGetProcAddress = Proc (*)(Device device, char const *procName);
+template <> struct IsMoonBitmask<MapMode> {
+  static constexpr bool enable = true;
+};
 
-// Procs of Adapter
-using ProcAdapterEnumerateFeatures = usize (*)(Adapter adapter,
-                                               FeatureName *features);
-using ProcAdapterGetLimits = bool (*)(Adapter adapter, SupportedLimits *limits);
-using ProcAdapterGetProperties = void (*)(Adapter adapter,
-                                          AdapterProperties *properties);
-using ProcAdapterHasFeature = bool (*)(Adapter adapter, FeatureName feature);
-using ProcAdapterRequestDevice =
-    void (*)(Adapter adapter, DeviceDescriptor const *descriptor /* nullable */,
-             RequestDeviceCallback callback, void *userdata);
+template <> struct IsMoonBitmask<ShaderStage> {
+  static constexpr bool enable = true;
+};
 
-// Procs of BindGroup
-using ProcBindGroupSetLabel = void (*)(BindGroup bindGroup, char const *label);
+template <> struct IsMoonBitmask<TextureUsage> {
+  static constexpr bool enable = true;
+};
 
-// Procs of BindGroupLayout
-using ProcBindGroupLayoutSetLabel = void (*)(BindGroupLayout bindGroupLayout,
-                                             char const *label);
+struct GPUProcTable {
+  WGPUProcCreateInstance create_instance;
+  WGPUProcGetProcAddress get_proc_address;
 
-// Procs of Buffer
-using ProcBufferDestroy = void (*)(Buffer buffer);
-using ProcBufferGetConstMappedRange = void const *(*)(Buffer buffer,
-                                                      usize offset, usize size);
-using ProcBufferGetMappedRange = void *(*)(Buffer buffer, usize offset,
-                                           usize size);
-using ProcBufferGetSize = u64 (*)(Buffer buffer);
-using ProcBufferGetUsage = BufferUsage (*)(Buffer buffer);
-using ProcBufferMapAsync = void (*)(Buffer buffer, MapModeFlags mode,
-                                    usize offset, usize size,
-                                    BufferMapCallback callback, void *userdata);
-using ProcBufferSetLabel = void (*)(Buffer buffer, char const *label);
-using ProcBufferUnmap = void (*)(Buffer buffer);
+  WGPUProcAdapterCreateDevice adapter_create_device;
+  WGPUProcAdapterEnumerateFeatures adapter_enumerate_features;
+  WGPUProcAdapterGetLimits adapter_get_limits;
+  WGPUProcAdapterGetProperties adapter_get_properties;
+  WGPUProcAdapterHasFeature adapter_has_feature;
+  WGPUProcAdapterRequestDevice adapter_request_device;
+  WGPUProcAdapterReference adapter_reference;
+  WGPUProcAdapterRelease adapter_release;
 
-// Procs of CommandBuffer
-using ProcCommandBufferSetLabel = void (*)(CommandBuffer commandBuffer,
-                                           char const *label);
+  WGPUProcBindGroupSetLabel bind_group_set_label;
+  WGPUProcBindGroupReference bind_group_reference;
+  WGPUProcBindGroupRelease bind_group_release;
 
-// Procs of CommandEncoder
-using ProcCommandEncoderBeginComputePass = ComputePassEncoder (*)(
-    CommandEncoder commandEncoder,
-    ComputePassDescriptor const *descriptor /* nullable */);
-using ProcCommandEncoderBeginRenderPass = RenderPassEncoder (*)(
-    CommandEncoder commandEncoder, RenderPassDescriptor const *descriptor);
-using ProcCommandEncoderClearBuffer = void (*)(CommandEncoder commandEncoder,
-                                               Buffer buffer, u64 offset,
-                                               u64 size);
-using ProcCommandEncoderCopyBufferToBuffer =
-    void (*)(CommandEncoder commandEncoder, Buffer source, u64 sourceOffset,
-             Buffer destination, u64 destinationOffset, u64 size);
-using ProcCommandEncoderCopyBufferToTexture =
-    void (*)(CommandEncoder commandEncoder, ImageCopyBuffer const *source,
-             ImageCopyTexture const *destination, Extent3D const *copySize);
-using ProcCommandEncoderCopyTextureToBuffer =
-    void (*)(CommandEncoder commandEncoder, ImageCopyTexture const *source,
-             ImageCopyBuffer const *destination, Extent3D const *copySize);
-using ProcCommandEncoderCopyTextureToTexture =
-    void (*)(CommandEncoder commandEncoder, ImageCopyTexture const *source,
-             ImageCopyTexture const *destination, Extent3D const *copySize);
-using ProcCommandEncoderFinish =
-    CommandBuffer (*)(CommandEncoder commandEncoder,
-                      CommandBufferDescriptor const *descriptor /* nullable */);
-using ProcCommandEncoderInsertDebugMarker =
-    void (*)(CommandEncoder commandEncoder, char const *markerLabel);
-using ProcCommandEncoderPopDebugGroup = void (*)(CommandEncoder commandEncoder);
-using ProcCommandEncoderPushDebugGroup = void (*)(CommandEncoder commandEncoder,
-                                                  char const *groupLabel);
-using ProcCommandEncoderResolveQuerySet =
-    void (*)(CommandEncoder commandEncoder, QuerySet querySet, u32 firstQuery,
-             u32 queryCount, Buffer destination, u64 destinationOffset);
-using ProcCommandEncoderSetLabel = void (*)(CommandEncoder commandEncoder,
-                                            char const *label);
-using ProcCommandEncoderWriteTimestamp = void (*)(CommandEncoder commandEncoder,
-                                                  QuerySet querySet,
-                                                  u32 queryIndex);
+  WGPUProcBindGroupLayoutSetLabel bind_group_layout_set_label;
+  WGPUProcBindGroupLayoutReference bind_group_layout_reference;
+  WGPUProcBindGroupLayoutRelease bind_group_layout_release;
 
-// Procs of ComputePassEncoder
-using ProcComputePassEncoderBeginPipelineStatisticsQuery = void (*)(
-    ComputePassEncoder computePassEncoder, QuerySet querySet, u32 queryIndex);
-using ProcComputePassEncoderDispatchWorkgroups =
-    void (*)(ComputePassEncoder computePassEncoder, u32 workgroupCountX,
-             u32 workgroupCountY, u32 workgroupCountZ);
-using ProcComputePassEncoderDispatchWorkgroupsIndirect =
-    void (*)(ComputePassEncoder computePassEncoder, Buffer indirectBuffer,
-             u64 indirectOffset);
-using ProcComputePassEncoderEnd =
-    void (*)(ComputePassEncoder computePassEncoder);
-using ProcComputePassEncoderEndPipelineStatisticsQuery =
-    void (*)(ComputePassEncoder computePassEncoder);
-using ProcComputePassEncoderInsertDebugMarker =
-    void (*)(ComputePassEncoder computePassEncoder, char const *markerLabel);
-using ProcComputePassEncoderPopDebugGroup =
-    void (*)(ComputePassEncoder computePassEncoder);
-using ProcComputePassEncoderPushDebugGroup =
-    void (*)(ComputePassEncoder computePassEncoder, char const *groupLabel);
-using ProcComputePassEncoderSetBindGroup = void (*)(
-    ComputePassEncoder computePassEncoder, u32 groupIndex, BindGroup group,
-    u32 dynamicOffsetCount, u32 const *dynamicOffsets);
-using ProcComputePassEncoderSetLabel =
-    void (*)(ComputePassEncoder computePassEncoder, char const *label);
-using ProcComputePassEncoderSetPipeline =
-    void (*)(ComputePassEncoder computePassEncoder, ComputePipeline pipeline);
+  WGPUProcBufferDestroy buffer_destroy;
+  WGPUProcBufferGetConstMappedRange buffer_get_const_mapped_range;
+  WGPUProcBufferGetMappedRange buffer_get_mapped_range;
+  WGPUProcBufferGetSize buffer_get_size;
+  WGPUProcBufferGetUsage buffer_get_usage;
+  WGPUProcBufferMapAsync buffer_map_async;
+  WGPUProcBufferSetLabel buffer_set_label;
+  WGPUProcBufferUnmap buffer_unmap;
+  WGPUProcBufferReference buffer_reference;
+  WGPUProcBufferRelease buffer_release;
 
-// Procs of ComputePipeline
-using ProcComputePipelineGetBindGroupLayout =
-    BindGroupLayout (*)(ComputePipeline computePipeline, u32 groupIndex);
-using ProcComputePipelineSetLabel = void (*)(ComputePipeline computePipeline,
-                                             char const *label);
+  WGPUProcCommandBufferSetLabel command_buffer_set_label;
+  WGPUProcCommandBufferReference command_buffer_reference;
+  WGPUProcCommandBufferRelease command_buffer_release;
 
-// Procs of Device
-using ProcDeviceCreateBindGroup =
-    BindGroup (*)(Device device, BindGroupDescriptor const *descriptor);
-using ProcDeviceCreateBindGroupLayout = BindGroupLayout (*)(
-    Device device, BindGroupLayoutDescriptor const *descriptor);
-using ProcDeviceCreateBuffer = Buffer (*)(Device device,
-                                          BufferDescriptor const *descriptor);
-using ProcDeviceCreateCommandEncoder = CommandEncoder (*)(
-    Device device, CommandEncoderDescriptor const *descriptor /* nullable */);
-using ProcDeviceCreateComputePipeline = ComputePipeline (*)(
-    Device device, ComputePipelineDescriptor const *descriptor);
-using ProcDeviceCreateComputePipelineAsync =
-    void (*)(Device device, ComputePipelineDescriptor const *descriptor,
-             CreateComputePipelineAsyncCallback callback, void *userdata);
-using ProcDeviceCreatePipelineLayout = PipelineLayout (*)(
-    Device device, PipelineLayoutDescriptor const *descriptor);
-using ProcDeviceCreateQuerySet =
-    QuerySet (*)(Device device, QuerySetDescriptor const *descriptor);
-using ProcDeviceCreateRenderBundleEncoder = RenderBundleEncoder (*)(
-    Device device, RenderBundleEncoderDescriptor const *descriptor);
-using ProcDeviceCreateRenderPipeline = RenderPipeline (*)(
-    Device device, RenderPipelineDescriptor const *descriptor);
-using ProcDeviceCreateRenderPipelineAsync =
-    void (*)(Device device, RenderPipelineDescriptor const *descriptor,
-             CreateRenderPipelineAsyncCallback callback, void *userdata);
-using ProcDeviceCreateSampler = Sampler (*)(
-    Device device, SamplerDescriptor const *descriptor /* nullable */);
-using ProcDeviceCreateShaderModule =
-    ShaderModule (*)(Device device, ShaderModuleDescriptor const *descriptor);
-using ProcDeviceCreateSwapChain = SwapChain (*)(
-    Device device, Surface surface, SwapChainDescriptor const *descriptor);
-using ProcDeviceCreateTexture =
-    Texture (*)(Device device, TextureDescriptor const *descriptor);
-using ProcDeviceDestroy = void (*)(Device device);
-using ProcDeviceEnumerateFeatures = usize (*)(Device device,
-                                              FeatureName *features);
-using ProcDeviceGetLimits = bool (*)(Device device, SupportedLimits *limits);
-using ProcDeviceGetQueue = Queue (*)(Device device);
-using ProcDeviceHasFeature = bool (*)(Device device, FeatureName feature);
-using ProcDevicePopErrorScope = bool (*)(Device device, ErrorCallback callback,
-                                         void *userdata);
-using ProcDevicePushErrorScope = void (*)(Device device, ErrorFilter filter);
-using ProcDeviceSetDeviceLostCallback = void (*)(Device device,
-                                                 DeviceLostCallback callback,
-                                                 void *userdata);
-using ProcDeviceSetLabel = void (*)(Device device, char const *label);
-using ProcDeviceSetUncapturedErrorCallback = void (*)(Device device,
-                                                      ErrorCallback callback,
-                                                      void *userdata);
+  WGPUProcCommandEncoderBeginComputePass command_encoder_begin_compute_pass;
+  WGPUProcCommandEncoderBeginRenderPass command_encoder_begin_render_pass;
+  WGPUProcCommandEncoderClearBuffer command_encoder_clear_buffer;
+  WGPUProcCommandEncoderCopyBufferToBuffer
+      command_encoder_copy_buffer_to_buffer;
+  WGPUProcCommandEncoderCopyBufferToTexture
+      command_encoder_copy_buffer_to_texture;
+  WGPUProcCommandEncoderCopyTextureToBuffer
+      command_encoder_copy_texture_to_buffer;
+  WGPUProcCommandEncoderCopyTextureToTexture
+      command_encoder_copy_texture_to_texture;
+  WGPUProcCommandEncoderCopyTextureToTextureInternal
+      command_encoder_copy_texture_to_texture_internal;
+  WGPUProcCommandEncoderFinish command_encoder_finish;
+  WGPUProcCommandEncoderInjectValidationError
+      command_encoder_inject_validation_error;
+  WGPUProcCommandEncoderInsertDebugMarker command_encoder_insert_debug_marker;
+  WGPUProcCommandEncoderPopDebugGroup command_encoder_pop_debug_group;
+  WGPUProcCommandEncoderPushDebugGroup command_encoder_push_debug_group;
+  WGPUProcCommandEncoderResolveQuerySet command_encoder_resolve_query_set;
+  WGPUProcCommandEncoderSetLabel command_encoder_set_label;
+  WGPUProcCommandEncoderWriteBuffer command_encoder_write_buffer;
+  WGPUProcCommandEncoderWriteTimestamp command_encoder_write_timestamp;
+  WGPUProcCommandEncoderReference command_encoder_reference;
+  WGPUProcCommandEncoderRelease command_encoder_release;
 
-// Procs of Instance
-using ProcInstanceCreateSurface =
-    Surface (*)(Instance instance, SurfaceDescriptor const *descriptor);
-using ProcInstanceProcessEvents = void (*)(Instance instance);
-using ProcInstanceRequestAdapter = void (*)(
-    Instance instance, RequestAdapterOptions const *options /* nullable */,
-    RequestAdapterCallback callback, void *userdata);
+  WGPUProcComputePassEncoderDispatch compute_pass_encoder_dispatch;
+  WGPUProcComputePassEncoderDispatchIndirect
+      compute_pass_encoder_dispatch_indirect;
+  WGPUProcComputePassEncoderDispatchWorkgroups
+      compute_pass_encoder_dispatch_workgroups;
+  WGPUProcComputePassEncoderDispatchWorkgroupsIndirect
+      compute_pass_encoder_dispatch_workgroups_indirect;
+  WGPUProcComputePassEncoderEnd compute_pass_encoder_end;
+  WGPUProcComputePassEncoderEndPass compute_pass_encoder_end_pass;
+  WGPUProcComputePassEncoderInsertDebugMarker
+      compute_pass_encoder_insert_debug_marker;
+  WGPUProcComputePassEncoderPopDebugGroup compute_pass_encoder_pop_debug_group;
+  WGPUProcComputePassEncoderPushDebugGroup
+      compute_pass_encoder_push_debug_group;
+  WGPUProcComputePassEncoderSetBindGroup compute_pass_encoder_set_bind_group;
+  WGPUProcComputePassEncoderSetLabel compute_pass_encoder_set_label;
+  WGPUProcComputePassEncoderSetPipeline compute_pass_encoder_set_pipeline;
+  WGPUProcComputePassEncoderWriteTimestamp compute_pass_encoder_write_timestamp;
+  WGPUProcComputePassEncoderReference compute_pass_encoder_reference;
+  WGPUProcComputePassEncoderRelease compute_pass_encoder_release;
 
-// Procs of PipelineLayout
-using ProcPipelineLayoutSetLabel = void (*)(PipelineLayout pipelineLayout,
-                                            char const *label);
+  WGPUProcComputePipelineGetBindGroupLayout
+      compute_pipeline_get_bind_group_layout;
+  WGPUProcComputePipelineSetLabel compute_pipeline_set_label;
+  WGPUProcComputePipelineReference compute_pipeline_reference;
+  WGPUProcComputePipelineRelease compute_pipeline_release;
 
-// Procs of QuerySet
-using ProcQuerySetDestroy = void (*)(QuerySet querySet);
-using ProcQuerySetGetCount = u32 (*)(QuerySet querySet);
-using ProcQuerySetGetType = QueryType (*)(QuerySet querySet);
-using ProcQuerySetSetLabel = void (*)(QuerySet querySet, char const *label);
+  WGPUProcDeviceCreateBindGroup device_create_bind_group;
+  WGPUProcDeviceCreateBindGroupLayout device_create_bind_group_layout;
+  WGPUProcDeviceCreateBuffer device_create_buffer;
+  WGPUProcDeviceCreateCommandEncoder device_create_command_encoder;
+  WGPUProcDeviceCreateComputePipeline device_create_compute_pipeline;
+  WGPUProcDeviceCreateComputePipelineAsync device_create_compute_pipeline_async;
+  WGPUProcDeviceCreateErrorBuffer device_create_error_buffer;
+  WGPUProcDeviceCreateErrorExternalTexture device_create_error_external_texture;
+  WGPUProcDeviceCreateErrorTexture device_create_error_texture;
+  WGPUProcDeviceCreateExternalTexture device_create_external_texture;
+  WGPUProcDeviceCreatePipelineLayout device_create_pipeline_layout;
+  WGPUProcDeviceCreateQuerySet device_create_query_set;
+  WGPUProcDeviceCreateRenderBundleEncoder device_create_render_bundle_encoder;
+  WGPUProcDeviceCreateRenderPipeline device_create_render_pipeline;
+  WGPUProcDeviceCreateRenderPipelineAsync device_create_render_pipeline_async;
+  WGPUProcDeviceCreateSampler device_create_sampler;
+  WGPUProcDeviceCreateShaderModule device_create_shader_module;
+  WGPUProcDeviceCreateSwapChain device_create_swap_chain;
+  WGPUProcDeviceCreateTexture device_create_texture;
+  WGPUProcDeviceDestroy device_destroy;
+  WGPUProcDeviceEnumerateFeatures device_enumerate_features;
+  WGPUProcDeviceForceLoss device_force_loss;
+  WGPUProcDeviceGetAdapter device_get_adapter;
+  WGPUProcDeviceGetLimits device_get_limits;
+  WGPUProcDeviceGetQueue device_get_queue;
+  WGPUProcDeviceHasFeature device_has_feature;
+  WGPUProcDeviceInjectError device_inject_error;
+  WGPUProcDevicePopErrorScope device_pop_error_scope;
+  WGPUProcDevicePushErrorScope device_push_error_scope;
+  WGPUProcDeviceSetDeviceLostCallback device_set_device_lost_callback;
+  WGPUProcDeviceSetLabel device_set_label;
+  WGPUProcDeviceSetLoggingCallback device_set_logging_callback;
+  WGPUProcDeviceSetUncapturedErrorCallback device_set_uncaptured_error_callback;
+  WGPUProcDeviceTick device_tick;
+  WGPUProcDeviceReference device_reference;
+  WGPUProcDeviceRelease device_release;
 
-// Procs of Queue
-using ProcQueueOnSubmittedWorkDone = void (*)(Queue queue,
-                                              QueueWorkDoneCallback callback,
-                                              void *userdata);
-using ProcQueueSetLabel = void (*)(Queue queue, char const *label);
-using ProcQueueSubmit = void (*)(Queue queue, u32 commandCount,
-                                 CommandBuffer const *commands);
-using ProcQueueWriteBuffer = void (*)(Queue queue, Buffer buffer,
-                                      u64 bufferOffset, void const *data,
-                                      usize size);
-using ProcQueueWriteTexture = void (*)(Queue queue,
-                                       ImageCopyTexture const *destination,
-                                       void const *data, usize dataSize,
-                                       TextureDataLayout const *dataLayout,
-                                       Extent3D const *writeSize);
+  WGPUProcExternalTextureDestroy external_texture_destroy;
+  WGPUProcExternalTextureSetLabel external_texture_set_label;
+  WGPUProcExternalTextureReference external_texture_reference;
+  WGPUProcExternalTextureRelease external_texture_release;
 
-// Procs of RenderBundleEncoder
-using ProcRenderBundleEncoderDraw =
-    void (*)(RenderBundleEncoder renderBundleEncoder, u32 vertexCount,
-             u32 instanceCount, u32 firstVertex, u32 firstInstance);
-using ProcRenderBundleEncoderDrawIndexed = void (*)(
-    RenderBundleEncoder renderBundleEncoder, u32 indexCount, u32 instanceCount,
-    u32 firstIndex, i32 baseVertex, u32 firstInstance);
-using ProcRenderBundleEncoderDrawIndexedIndirect =
-    void (*)(RenderBundleEncoder renderBundleEncoder, Buffer indirectBuffer,
-             u64 indirectOffset);
-using ProcRenderBundleEncoderDrawIndirect =
-    void (*)(RenderBundleEncoder renderBundleEncoder, Buffer indirectBuffer,
-             u64 indirectOffset);
-using ProcRenderBundleEncoderFinish =
-    RenderBundle (*)(RenderBundleEncoder renderBundleEncoder,
-                     RenderBundleDescriptor const *descriptor /* nullable */);
-using ProcRenderBundleEncoderInsertDebugMarker =
-    void (*)(RenderBundleEncoder renderBundleEncoder, char const *markerLabel);
-using ProcRenderBundleEncoderPopDebugGroup =
-    void (*)(RenderBundleEncoder renderBundleEncoder);
-using ProcRenderBundleEncoderPushDebugGroup =
-    void (*)(RenderBundleEncoder renderBundleEncoder, char const *groupLabel);
-using ProcRenderBundleEncoderSetBindGroup = void (*)(
-    RenderBundleEncoder renderBundleEncoder, u32 groupIndex, BindGroup group,
-    u32 dynamicOffsetCount, u32 const *dynamicOffsets);
-using ProcRenderBundleEncoderSetIndexBuffer =
-    void (*)(RenderBundleEncoder renderBundleEncoder, Buffer buffer,
-             IndexFormat format, u64 offset, u64 size);
-using ProcRenderBundleEncoderSetLabel =
-    void (*)(RenderBundleEncoder renderBundleEncoder, char const *label);
-using ProcRenderBundleEncoderSetPipeline =
-    void (*)(RenderBundleEncoder renderBundleEncoder, RenderPipeline pipeline);
-using ProcRenderBundleEncoderSetVertexBuffer =
-    void (*)(RenderBundleEncoder renderBundleEncoder, u32 slot, Buffer buffer,
-             u64 offset, u64 size);
+  WGPUProcInstanceCreateSurface instance_create_surface;
+  WGPUProcInstanceRequestAdapter instance_request_adapter;
+  WGPUProcInstanceReference instance_reference;
+  WGPUProcInstanceRelease instance_release;
 
-// Procs of RenderPassEncoder
-using ProcRenderPassEncoderBeginOcclusionQuery =
-    void (*)(RenderPassEncoder renderPassEncoder, u32 queryIndex);
-using ProcRenderPassEncoderBeginPipelineStatisticsQuery = void (*)(
-    RenderPassEncoder renderPassEncoder, QuerySet querySet, u32 queryIndex);
-using ProcRenderPassEncoderDraw = void (*)(RenderPassEncoder renderPassEncoder,
-                                           u32 vertexCount, u32 instanceCount,
-                                           u32 firstVertex, u32 firstInstance);
-using ProcRenderPassEncoderDrawIndexed = void (*)(
-    RenderPassEncoder renderPassEncoder, u32 indexCount, u32 instanceCount,
-    u32 firstIndex, i32 baseVertex, u32 firstInstance);
-using ProcRenderPassEncoderDrawIndexedIndirect =
-    void (*)(RenderPassEncoder renderPassEncoder, Buffer indirectBuffer,
-             u64 indirectOffset);
-using ProcRenderPassEncoderDrawIndirect =
-    void (*)(RenderPassEncoder renderPassEncoder, Buffer indirectBuffer,
-             u64 indirectOffset);
-using ProcRenderPassEncoderEnd = void (*)(RenderPassEncoder renderPassEncoder);
-using ProcRenderPassEncoderEndOcclusionQuery =
-    void (*)(RenderPassEncoder renderPassEncoder);
-using ProcRenderPassEncoderEndPipelineStatisticsQuery =
-    void (*)(RenderPassEncoder renderPassEncoder);
-using ProcRenderPassEncoderExecuteBundles =
-    void (*)(RenderPassEncoder renderPassEncoder, u32 bundlesCount,
-             RenderBundle const *bundles);
-using ProcRenderPassEncoderInsertDebugMarker =
-    void (*)(RenderPassEncoder renderPassEncoder, char const *markerLabel);
-using ProcRenderPassEncoderPopDebugGroup =
-    void (*)(RenderPassEncoder renderPassEncoder);
-using ProcRenderPassEncoderPushDebugGroup =
-    void (*)(RenderPassEncoder renderPassEncoder, char const *groupLabel);
-using ProcRenderPassEncoderSetBindGroup = void (*)(
-    RenderPassEncoder renderPassEncoder, u32 groupIndex, BindGroup group,
-    u32 dynamicOffsetCount, u32 const *dynamicOffsets);
-using ProcRenderPassEncoderSetBlendConstant =
-    void (*)(RenderPassEncoder renderPassEncoder, Color const *color);
-using ProcRenderPassEncoderSetIndexBuffer =
-    void (*)(RenderPassEncoder renderPassEncoder, Buffer buffer,
-             IndexFormat format, u64 offset, u64 size);
-using ProcRenderPassEncoderSetLabel =
-    void (*)(RenderPassEncoder renderPassEncoder, char const *label);
-using ProcRenderPassEncoderSetPipeline =
-    void (*)(RenderPassEncoder renderPassEncoder, RenderPipeline pipeline);
-using ProcRenderPassEncoderSetScissorRect = void (*)(
-    RenderPassEncoder renderPassEncoder, u32 x, u32 y, u32 width, u32 height);
-using ProcRenderPassEncoderSetStencilReference =
-    void (*)(RenderPassEncoder renderPassEncoder, u32 reference);
-using ProcRenderPassEncoderSetVertexBuffer =
-    void (*)(RenderPassEncoder renderPassEncoder, u32 slot, Buffer buffer,
-             u64 offset, u64 size);
-using ProcRenderPassEncoderSetViewport =
-    void (*)(RenderPassEncoder renderPassEncoder, float x, float y, float width,
-             float height, float minDepth, float maxDepth);
+  WGPUProcPipelineLayoutSetLabel pipeline_layout_set_label;
+  WGPUProcPipelineLayoutReference pipeline_layout_reference;
+  WGPUProcPipelineLayoutRelease pipeline_layout_release;
 
-// Procs of RenderPipeline
-using ProcRenderPipelineGetBindGroupLayout =
-    BindGroupLayout (*)(RenderPipeline renderPipeline, u32 groupIndex);
-using ProcRenderPipelineSetLabel = void (*)(RenderPipeline renderPipeline,
-                                            char const *label);
+  WGPUProcQuerySetDestroy query_set_destroy;
+  WGPUProcQuerySetGetCount query_set_get_count;
+  WGPUProcQuerySetGetType query_set_get_type;
+  WGPUProcQuerySetSetLabel query_set_set_label;
+  WGPUProcQuerySetReference query_set_reference;
+  WGPUProcQuerySetRelease query_set_release;
 
-// Procs of Sampler
-using ProcSamplerSetLabel = void (*)(Sampler sampler, char const *label);
+  WGPUProcQueueCopyTextureForBrowser queue_copy_texture_for_browser;
+  WGPUProcQueueOnSubmittedWorkDone queue_on_submitted_work_done;
+  WGPUProcQueueSetLabel queue_set_label;
+  WGPUProcQueueSubmit queue_submit;
+  WGPUProcQueueWriteBuffer queue_write_buffer;
+  WGPUProcQueueWriteTexture queue_write_texture;
+  WGPUProcQueueReference queue_reference;
+  WGPUProcQueueRelease queue_release;
 
-// Procs of ShaderModule
-using ProcShaderModuleGetCompilationInfo =
-    void (*)(ShaderModule shaderModule, CompilationInfoCallback callback,
-             void *userdata);
-using ProcShaderModuleSetLabel = void (*)(ShaderModule shaderModule,
-                                          char const *label);
+  WGPUProcRenderBundleReference render_bundle_reference;
+  WGPUProcRenderBundleRelease render_bundle_release;
 
-// Procs of Surface
-using ProcSurfaceGetPreferredFormat = TextureFormat (*)(Surface surface,
-                                                        Adapter adapter);
+  WGPUProcRenderBundleEncoderDraw render_bundle_encoder_draw;
+  WGPUProcRenderBundleEncoderDrawIndexed render_bundle_encoder_draw_indexed;
+  WGPUProcRenderBundleEncoderDrawIndexedIndirect
+      render_bundle_encoder_draw_indexed_indirect;
+  WGPUProcRenderBundleEncoderDrawIndirect render_bundle_encoder_draw_indirect;
+  WGPUProcRenderBundleEncoderFinish render_bundle_encoder_finish;
+  WGPUProcRenderBundleEncoderInsertDebugMarker
+      render_bundle_encoder_insert_debug_marker;
+  WGPUProcRenderBundleEncoderPopDebugGroup
+      render_bundle_encoder_pop_debug_group;
+  WGPUProcRenderBundleEncoderPushDebugGroup
+      render_bundle_encoder_push_debug_group;
+  WGPUProcRenderBundleEncoderSetBindGroup render_bundle_encoder_set_bind_group;
+  WGPUProcRenderBundleEncoderSetIndexBuffer
+      render_bundle_encoder_set_index_buffer;
+  WGPUProcRenderBundleEncoderSetLabel render_bundle_encoder_set_label;
+  WGPUProcRenderBundleEncoderSetPipeline render_bundle_encoder_set_pipeline;
+  WGPUProcRenderBundleEncoderSetVertexBuffer
+      render_bundle_encoder_set_vertex_buffer;
+  WGPUProcRenderBundleEncoderReference render_bundle_encoder_reference;
+  WGPUProcRenderBundleEncoderRelease render_bundle_encoder_release;
 
-// Procs of SwapChain
-using ProcSwapChainGetCurrentTextureView = TextureView (*)(SwapChain swapChain);
-using ProcSwapChainPresent = void (*)(SwapChain swapChain);
+  WGPUProcRenderPassEncoderBeginOcclusionQuery
+      render_pass_encoder_begin_occlusion_query;
+  WGPUProcRenderPassEncoderDraw render_pass_encoder_draw;
+  WGPUProcRenderPassEncoderDrawIndexed render_pass_encoder_draw_indexed;
+  WGPUProcRenderPassEncoderDrawIndexedIndirect
+      render_pass_encoder_draw_indexed_indirect;
+  WGPUProcRenderPassEncoderDrawIndirect render_pass_encoder_draw_indirect;
+  WGPUProcRenderPassEncoderEnd render_pass_encoder_end;
+  WGPUProcRenderPassEncoderEndOcclusionQuery
+      render_pass_encoder_end_occlusion_query;
+  WGPUProcRenderPassEncoderEndPass render_pass_encoder_end_pass;
+  WGPUProcRenderPassEncoderExecuteBundles render_pass_encoder_execute_bundles;
+  WGPUProcRenderPassEncoderInsertDebugMarker
+      render_pass_encoder_insert_debug_marker;
+  WGPUProcRenderPassEncoderPopDebugGroup render_pass_encoder_pop_debug_group;
+  WGPUProcRenderPassEncoderPushDebugGroup render_pass_encoder_push_debug_group;
+  WGPUProcRenderPassEncoderSetBindGroup render_pass_encoder_set_bind_group;
+  WGPUProcRenderPassEncoderSetBlendConstant
+      render_pass_encoder_set_blend_constant;
+  WGPUProcRenderPassEncoderSetIndexBuffer render_pass_encoder_set_index_buffer;
+  WGPUProcRenderPassEncoderSetLabel render_pass_encoder_set_label;
+  WGPUProcRenderPassEncoderSetPipeline render_pass_encoder_set_pipeline;
+  WGPUProcRenderPassEncoderSetScissorRect render_pass_encoder_set_scissor_rect;
+  WGPUProcRenderPassEncoderSetStencilReference
+      render_pass_encoder_set_stencil_reference;
+  WGPUProcRenderPassEncoderSetVertexBuffer
+      render_pass_encoder_set_vertex_buffer;
+  WGPUProcRenderPassEncoderSetViewport render_pass_encoder_set_viewport;
+  WGPUProcRenderPassEncoderWriteTimestamp render_pass_encoder_write_timestamp;
+  WGPUProcRenderPassEncoderReference render_pass_encoder_reference;
+  WGPUProcRenderPassEncoderRelease render_pass_encoder_release;
 
-// Procs of Texture
-using ProcTextureCreateView = TextureView (*)(
-    Texture texture, TextureViewDescriptor const *descriptor /* nullable */);
-using ProcTextureDestroy = void (*)(Texture texture);
-using ProcTextureGetDepthOrArrayLayers = u32 (*)(Texture texture);
-using ProcTextureGetDimension = TextureDimension (*)(Texture texture);
-using ProcTextureGetFormat = TextureFormat (*)(Texture texture);
-using ProcTextureGetHeight = u32 (*)(Texture texture);
-using ProcTextureGetMipLevelCount = u32 (*)(Texture texture);
-using ProcTextureGetSampleCount = u32 (*)(Texture texture);
-using ProcTextureGetUsage = TextureUsage (*)(Texture texture);
-using ProcTextureGetWidth = u32 (*)(Texture texture);
-using ProcTextureSetLabel = void (*)(Texture texture, char const *label);
+  WGPUProcRenderPipelineGetBindGroupLayout
+      render_pipeline_get_bind_group_layout;
+  WGPUProcRenderPipelineSetLabel render_pipeline_set_label;
+  WGPUProcRenderPipelineReference render_pipeline_reference;
+  WGPUProcRenderPipelineRelease render_pipeline_release;
 
-// Procs of TextureView
-using ProcTextureViewSetLabel = void (*)(TextureView textureView,
-                                         char const *label);
+  WGPUProcSamplerSetLabel sampler_set_label;
+  WGPUProcSamplerReference sampler_reference;
+  WGPUProcSamplerRelease sampler_release;
 
-// declarations
+  WGPUProcShaderModuleGetCompilationInfo shader_module_get_compilation_info;
+  WGPUProcShaderModuleSetLabel shader_module_set_label;
+  WGPUProcShaderModuleReference shader_module_reference;
+  WGPUProcShaderModuleRelease shader_module_release;
 
-MOON_API auto CreateInstance(InstanceDescriptor const *descriptor) -> Instance;
-MOON_API auto GetProcAddress(Device device, char const *procName) -> Proc;
+  WGPUProcSurfaceReference surface_reference;
+  WGPUProcSurfaceRelease surface_release;
 
-// Methods of Adapter
-MOON_API auto AdapterEnumerateFeatures(Adapter adapter, FeatureName *features)
-    -> usize;
-MOON_API auto AdapterGetLimits(Adapter adapter, SupportedLimits *limits)
-    -> bool;
-MOON_API void AdapterGetProperties(Adapter adapter,
-                                   AdapterProperties *properties);
-MOON_API auto AdapterHasFeature(Adapter adapter, FeatureName feature) -> bool;
-MOON_API void
-AdapterRequestDevice(Adapter adapter,
-                     DeviceDescriptor const *descriptor /* nullable */,
-                     RequestDeviceCallback callback, void *userdata);
+  WGPUProcSwapChainConfigure swap_chain_configure;
+  WGPUProcSwapChainGetCurrentTextureView swap_chain_get_current_texture_view;
+  WGPUProcSwapChainPresent swap_chain_present;
+  WGPUProcSwapChainReference swap_chain_reference;
+  WGPUProcSwapChainRelease swap_chain_release;
 
-// Methods of BindGroup
-MOON_API void BindGroupSetLabel(BindGroup bindGroup, char const *label);
+  WGPUProcTextureCreateView texture_create_view;
+  WGPUProcTextureDestroy texture_destroy;
+  WGPUProcTextureGetDepthOrArrayLayers texture_get_depth_or_array_layers;
+  WGPUProcTextureGetDimension texture_get_dimension;
+  WGPUProcTextureGetFormat texture_get_format;
+  WGPUProcTextureGetHeight texture_get_height;
+  WGPUProcTextureGetMipLevelCount texture_get_mip_level_count;
+  WGPUProcTextureGetSampleCount texture_get_sample_count;
+  WGPUProcTextureGetUsage texture_get_usage;
+  WGPUProcTextureGetWidth texture_get_width;
+  WGPUProcTextureSetLabel texture_set_label;
+  WGPUProcTextureReference texture_reference;
+  WGPUProcTextureRelease texture_release;
 
-// Methods of BindGroupLayout
-MOON_API void BindGroupLayoutSetLabel(BindGroupLayout bindGroupLayout,
-                                      char const *label);
+  WGPUProcTextureViewSetLabel texture_view_set_label;
+  WGPUProcTextureViewReference texture_view_reference;
+  WGPUProcTextureViewRelease texture_view_release;
+};
 
-// Methods of Buffer
-MOON_API void BufferDestroy(Buffer buffer);
-MOON_API auto BufferGetConstMappedRange(Buffer buffer, usize offset, usize size)
-    -> void const *;
-MOON_API auto BufferGetMappedRange(Buffer buffer, usize offset, usize size)
-    -> void *;
-MOON_API auto BufferGetSize(Buffer buffer) -> u64;
-MOON_API auto BufferGetUsage(Buffer buffer) -> BufferUsage;
-MOON_API void BufferMapAsync(Buffer buffer, MapModeFlags mode, usize offset,
-                             usize size, BufferMapCallback callback,
-                             void *userdata);
-MOON_API void BufferSetLabel(Buffer buffer, char const *label);
-MOON_API void BufferUnmap(Buffer buffer);
-
-// Methods of CommandBuffer
-MOON_API void CommandBufferSetLabel(CommandBuffer commandBuffer,
-                                    char const *label);
-
-// Methods of CommandEncoder
-MOON_API auto CommandEncoderBeginComputePass(
-    CommandEncoder commandEncoder,
-    ComputePassDescriptor const *descriptor /* nullable */)
-    -> ComputePassEncoder;
-MOON_API auto
-CommandEncoderBeginRenderPass(CommandEncoder commandEncoder,
-                              RenderPassDescriptor const *descriptor)
-    -> RenderPassEncoder;
-MOON_API void CommandEncoderClearBuffer(CommandEncoder commandEncoder,
-                                        Buffer buffer, u64 offset, u64 size);
-MOON_API void CommandEncoderCopyBufferToBuffer(CommandEncoder commandEncoder,
-                                               Buffer source, u64 sourceOffset,
-                                               Buffer destination,
-                                               u64 destinationOffset, u64 size);
-MOON_API void CommandEncoderCopyBufferToTexture(
-    CommandEncoder commandEncoder, ImageCopyBuffer const *source,
-    ImageCopyTexture const *destination, Extent3D const *copySize);
-MOON_API void CommandEncoderCopyTextureToBuffer(
-    CommandEncoder commandEncoder, ImageCopyTexture const *source,
-    ImageCopyBuffer const *destination, Extent3D const *copySize);
-MOON_API void CommandEncoderCopyTextureToTexture(
-    CommandEncoder commandEncoder, ImageCopyTexture const *source,
-    ImageCopyTexture const *destination, Extent3D const *copySize);
-MOON_API auto
-CommandEncoderFinish(CommandEncoder commandEncoder,
-                     CommandBufferDescriptor const *descriptor /* nullable */)
-    -> CommandBuffer;
-MOON_API void CommandEncoderInsertDebugMarker(CommandEncoder commandEncoder,
-                                              char const *markerLabel);
-MOON_API void CommandEncoderPopDebugGroup(CommandEncoder commandEncoder);
-MOON_API void CommandEncoderPushDebugGroup(CommandEncoder commandEncoder,
-                                           char const *groupLabel);
-MOON_API void CommandEncoderResolveQuerySet(CommandEncoder commandEncoder,
-                                            QuerySet querySet, u32 firstQuery,
-                                            u32 queryCount, Buffer destination,
-                                            u64 destinationOffset);
-MOON_API void CommandEncoderSetLabel(CommandEncoder commandEncoder,
-                                     char const *label);
-MOON_API void CommandEncoderWriteTimestamp(CommandEncoder commandEncoder,
-                                           QuerySet querySet, u32 queryIndex);
-
-// Methods of ComputePassEncoder
-MOON_API void ComputePassEncoderBeginPipelineStatisticsQuery(
-    ComputePassEncoder computePassEncoder, QuerySet querySet, u32 queryIndex);
-MOON_API void
-ComputePassEncoderDispatchWorkgroups(ComputePassEncoder computePassEncoder,
-                                     u32 workgroupCountX, u32 workgroupCountY,
-                                     u32 workgroupCountZ);
-MOON_API void ComputePassEncoderDispatchWorkgroupsIndirect(
-    ComputePassEncoder computePassEncoder, Buffer indirectBuffer,
-    u64 indirectOffset);
-MOON_API void ComputePassEncoderEnd(ComputePassEncoder computePassEncoder);
-MOON_API void ComputePassEncoderEndPipelineStatisticsQuery(
-    ComputePassEncoder computePassEncoder);
-MOON_API void
-ComputePassEncoderInsertDebugMarker(ComputePassEncoder computePassEncoder,
-                                    char const *markerLabel);
-MOON_API void
-ComputePassEncoderPopDebugGroup(ComputePassEncoder computePassEncoder);
-MOON_API void
-ComputePassEncoderPushDebugGroup(ComputePassEncoder computePassEncoder,
-                                 char const *groupLabel);
-MOON_API void ComputePassEncoderSetBindGroup(
-    ComputePassEncoder computePassEncoder, u32 groupIndex, BindGroup group,
-    u32 dynamicOffsetCount, u32 const *dynamicOffsets);
-MOON_API void ComputePassEncoderSetLabel(ComputePassEncoder computePassEncoder,
-                                         char const *label);
-MOON_API void
-ComputePassEncoderSetPipeline(ComputePassEncoder computePassEncoder,
-                              ComputePipeline pipeline);
-
-// Methods of ComputePipeline
-MOON_API auto ComputePipelineGetBindGroupLayout(ComputePipeline computePipeline,
-                                                u32 groupIndex)
-    -> BindGroupLayout;
-MOON_API void ComputePipelineSetLabel(ComputePipeline computePipeline,
-                                      char const *label);
-
-// Methods of Device
-MOON_API auto DeviceCreateBindGroup(Device device,
-                                    BindGroupDescriptor const *descriptor)
-    -> BindGroup;
-MOON_API auto
-DeviceCreateBindGroupLayout(Device device,
-                            BindGroupLayoutDescriptor const *descriptor)
-    -> BindGroupLayout;
-MOON_API auto DeviceCreateBuffer(Device device,
-                                 BufferDescriptor const *descriptor) -> Buffer;
-MOON_API auto DeviceCreateCommandEncoder(
-    Device device, CommandEncoderDescriptor const *descriptor /* nullable */)
-    -> CommandEncoder;
-MOON_API auto
-DeviceCreateComputePipeline(Device device,
-                            ComputePipelineDescriptor const *descriptor)
-    -> ComputePipeline;
-MOON_API void DeviceCreateComputePipelineAsync(
-    Device device, ComputePipelineDescriptor const *descriptor,
-    CreateComputePipelineAsyncCallback callback, void *userdata);
-MOON_API auto
-DeviceCreatePipelineLayout(Device device,
-                           PipelineLayoutDescriptor const *descriptor)
-    -> PipelineLayout;
-MOON_API auto DeviceCreateQuerySet(Device device,
-                                   QuerySetDescriptor const *descriptor)
-    -> QuerySet;
-MOON_API auto
-DeviceCreateRenderBundleEncoder(Device device,
-                                RenderBundleEncoderDescriptor const *descriptor)
-    -> RenderBundleEncoder;
-MOON_API auto
-DeviceCreateRenderPipeline(Device device,
-                           RenderPipelineDescriptor const *descriptor)
-    -> RenderPipeline;
-MOON_API void DeviceCreateRenderPipelineAsync(
-    Device device, RenderPipelineDescriptor const *descriptor,
-    CreateRenderPipelineAsyncCallback callback, void *userdata);
-MOON_API auto
-DeviceCreateSampler(Device device,
-                    SamplerDescriptor const *descriptor /* nullable */)
-    -> Sampler;
-MOON_API auto DeviceCreateShaderModule(Device device,
-                                       ShaderModuleDescriptor const *descriptor)
-    -> ShaderModule;
-MOON_API auto DeviceCreateSwapChain(Device device, Surface surface,
-                                    SwapChainDescriptor const *descriptor)
-    -> SwapChain;
-MOON_API auto DeviceCreateTexture(Device device,
-                                  TextureDescriptor const *descriptor)
-    -> Texture;
-MOON_API void DeviceDestroy(Device device);
-MOON_API auto DeviceEnumerateFeatures(Device device, FeatureName *features)
-    -> usize;
-MOON_API auto DeviceGetLimits(Device device, SupportedLimits *limits) -> bool;
-MOON_API auto DeviceGetQueue(Device device) -> Queue;
-MOON_API auto DeviceHasFeature(Device device, FeatureName feature) -> bool;
-MOON_API auto DevicePopErrorScope(Device device, ErrorCallback callback,
-                                  void *userdata) -> bool;
-MOON_API void DevicePushErrorScope(Device device, ErrorFilter filter);
-MOON_API void DeviceSetDeviceLostCallback(Device device,
-                                          DeviceLostCallback callback,
-                                          void *userdata);
-MOON_API void DeviceSetLabel(Device device, char const *label);
-MOON_API void DeviceSetUncapturedErrorCallback(Device device,
-                                               ErrorCallback callback,
-                                               void *userdata);
-
-// Methods of Instance
-MOON_API auto InstanceCreateSurface(Instance instance,
-                                    SurfaceDescriptor const *descriptor)
-    -> Surface;
-MOON_API void InstanceProcessEvents(Instance instance);
-MOON_API void
-InstanceRequestAdapter(Instance instance,
-                       RequestAdapterOptions const *options /* nullable */,
-                       RequestAdapterCallback callback, void *userdata);
-
-// Methods of PipelineLayout
-MOON_API void PipelineLayoutSetLabel(PipelineLayout pipelineLayout,
-                                     char const *label);
-
-// Methods of QuerySet
-MOON_API void QuerySetDestroy(QuerySet querySet);
-MOON_API auto QuerySetGetCount(QuerySet querySet) -> u32;
-MOON_API auto QuerySetGetType(QuerySet querySet) -> QueryType;
-MOON_API void QuerySetSetLabel(QuerySet querySet, char const *label);
-
-// Methods of Queue
-MOON_API void QueueOnSubmittedWorkDone(Queue queue,
-                                       QueueWorkDoneCallback callback,
-                                       void *userdata);
-MOON_API void QueueSetLabel(Queue queue, char const *label);
-MOON_API void QueueSubmit(Queue queue, u32 commandCount,
-                          CommandBuffer const *commands);
-MOON_API void QueueWriteBuffer(Queue queue, Buffer buffer, u64 bufferOffset,
-                               void const *data, usize size);
-MOON_API void QueueWriteTexture(Queue queue,
-                                ImageCopyTexture const *destination,
-                                void const *data, usize dataSize,
-                                TextureDataLayout const *dataLayout,
-                                Extent3D const *writeSize);
-
-// Methods of RenderBundleEncoder
-MOON_API void RenderBundleEncoderDraw(RenderBundleEncoder renderBundleEncoder,
-                                      u32 vertexCount, u32 instanceCount,
-                                      u32 firstVertex, u32 firstInstance);
-MOON_API void RenderBundleEncoderDrawIndexed(
-    RenderBundleEncoder renderBundleEncoder, u32 indexCount, u32 instanceCount,
-    u32 firstIndex, i32 baseVertex, u32 firstInstance);
-MOON_API void
-RenderBundleEncoderDrawIndexedIndirect(RenderBundleEncoder renderBundleEncoder,
-                                       Buffer indirectBuffer,
-                                       u64 indirectOffset);
-MOON_API void
-RenderBundleEncoderDrawIndirect(RenderBundleEncoder renderBundleEncoder,
-                                Buffer indirectBuffer, u64 indirectOffset);
-MOON_API auto RenderBundleEncoderFinish(
-    RenderBundleEncoder renderBundleEncoder,
-    RenderBundleDescriptor const *descriptor /* nullable */) -> RenderBundle;
-MOON_API void
-RenderBundleEncoderInsertDebugMarker(RenderBundleEncoder renderBundleEncoder,
-                                     char const *markerLabel);
-MOON_API void
-RenderBundleEncoderPopDebugGroup(RenderBundleEncoder renderBundleEncoder);
-MOON_API void
-RenderBundleEncoderPushDebugGroup(RenderBundleEncoder renderBundleEncoder,
-                                  char const *groupLabel);
-MOON_API void RenderBundleEncoderSetBindGroup(
-    RenderBundleEncoder renderBundleEncoder, u32 groupIndex, BindGroup group,
-    u32 dynamicOffsetCount, u32 const *dynamicOffsets);
-MOON_API void
-RenderBundleEncoderSetIndexBuffer(RenderBundleEncoder renderBundleEncoder,
-                                  Buffer buffer, IndexFormat format, u64 offset,
-                                  u64 size);
-MOON_API void
-RenderBundleEncoderSetLabel(RenderBundleEncoder renderBundleEncoder,
-                            char const *label);
-MOON_API void
-RenderBundleEncoderSetPipeline(RenderBundleEncoder renderBundleEncoder,
-                               RenderPipeline pipeline);
-MOON_API void
-RenderBundleEncoderSetVertexBuffer(RenderBundleEncoder renderBundleEncoder,
-                                   u32 slot, Buffer buffer, u64 offset,
-                                   u64 size);
-
-// Methods of RenderPassEncoder
-MOON_API void
-RenderPassEncoderBeginOcclusionQuery(RenderPassEncoder renderPassEncoder,
-                                     u32 queryIndex);
-MOON_API void RenderPassEncoderBeginPipelineStatisticsQuery(
-    RenderPassEncoder renderPassEncoder, QuerySet querySet, u32 queryIndex);
-MOON_API void RenderPassEncoderDraw(RenderPassEncoder renderPassEncoder,
-                                    u32 vertexCount, u32 instanceCount,
-                                    u32 firstVertex, u32 firstInstance);
-MOON_API void RenderPassEncoderDrawIndexed(RenderPassEncoder renderPassEncoder,
-                                           u32 indexCount, u32 instanceCount,
-                                           u32 firstIndex, i32 baseVertex,
-                                           u32 firstInstance);
-MOON_API void
-RenderPassEncoderDrawIndexedIndirect(RenderPassEncoder renderPassEncoder,
-                                     Buffer indirectBuffer, u64 indirectOffset);
-MOON_API void RenderPassEncoderDrawIndirect(RenderPassEncoder renderPassEncoder,
-                                            Buffer indirectBuffer,
-                                            u64 indirectOffset);
-MOON_API void RenderPassEncoderEnd(RenderPassEncoder renderPassEncoder);
-MOON_API void
-RenderPassEncoderEndOcclusionQuery(RenderPassEncoder renderPassEncoder);
-MOON_API void RenderPassEncoderEndPipelineStatisticsQuery(
-    RenderPassEncoder renderPassEncoder);
-MOON_API void
-RenderPassEncoderExecuteBundles(RenderPassEncoder renderPassEncoder,
-                                u32 bundlesCount, RenderBundle const *bundles);
-MOON_API void
-RenderPassEncoderInsertDebugMarker(RenderPassEncoder renderPassEncoder,
-                                   char const *markerLabel);
-MOON_API void
-RenderPassEncoderPopDebugGroup(RenderPassEncoder renderPassEncoder);
-MOON_API void
-RenderPassEncoderPushDebugGroup(RenderPassEncoder renderPassEncoder,
-                                char const *groupLabel);
-MOON_API void RenderPassEncoderSetBindGroup(RenderPassEncoder renderPassEncoder,
-                                            u32 groupIndex, BindGroup group,
-                                            u32 dynamicOffsetCount,
-                                            u32 const *dynamicOffsets);
-MOON_API void
-RenderPassEncoderSetBlendConstant(RenderPassEncoder renderPassEncoder,
-                                  Color const *color);
-MOON_API void
-RenderPassEncoderSetIndexBuffer(RenderPassEncoder renderPassEncoder,
-                                Buffer buffer, IndexFormat format, u64 offset,
-                                u64 size);
-MOON_API void RenderPassEncoderSetLabel(RenderPassEncoder renderPassEncoder,
-                                        char const *label);
-MOON_API void RenderPassEncoderSetPipeline(RenderPassEncoder renderPassEncoder,
-                                           RenderPipeline pipeline);
-MOON_API void
-RenderPassEncoderSetScissorRect(RenderPassEncoder renderPassEncoder, u32 x,
-                                u32 y, u32 width, u32 height);
-MOON_API void
-RenderPassEncoderSetStencilReference(RenderPassEncoder renderPassEncoder,
-                                     u32 reference);
-MOON_API void
-RenderPassEncoderSetVertexBuffer(RenderPassEncoder renderPassEncoder, u32 slot,
-                                 Buffer buffer, u64 offset, u64 size);
-MOON_API void RenderPassEncoderSetViewport(RenderPassEncoder renderPassEncoder,
-                                           float x, float y, float width,
-                                           float height, float minDepth,
-                                           float maxDepth);
-
-// Methods of RenderPipeline
-MOON_API auto RenderPipelineGetBindGroupLayout(RenderPipeline renderPipeline,
-                                               u32 groupIndex)
-    -> BindGroupLayout;
-MOON_API void RenderPipelineSetLabel(RenderPipeline renderPipeline,
-                                     char const *label);
-
-// Methods of Sampler
-MOON_API void SamplerSetLabel(Sampler sampler, char const *label);
-
-// Methods of ShaderModule
-MOON_API void ShaderModuleGetCompilationInfo(ShaderModule shaderModule,
-                                             CompilationInfoCallback callback,
-                                             void *userdata);
-MOON_API void ShaderModuleSetLabel(ShaderModule shaderModule,
-                                   char const *label);
-
-// Methods of Surface
-MOON_API auto SurfaceGetPreferredFormat(Surface surface, Adapter adapter)
-    -> TextureFormat;
-
-// Methods of SwapChain
-MOON_API auto SwapChainGetCurrentTextureView(SwapChain swapChain)
-    -> TextureView;
-MOON_API void SwapChainPresent(SwapChain swapChain);
-
-// Methods of Texture
-MOON_API auto
-TextureCreateView(Texture texture,
-                  TextureViewDescriptor const *descriptor /* nullable */)
-    -> TextureView;
-MOON_API void TextureDestroy(Texture texture);
-MOON_API auto TextureGetDepthOrArrayLayers(Texture texture) -> u32;
-MOON_API auto TextureGetDimension(Texture texture) -> TextureDimension;
-MOON_API auto TextureGetFormat(Texture texture) -> TextureFormat;
-MOON_API auto TextureGetHeight(Texture texture) -> u32;
-MOON_API auto TextureGetMipLevelCount(Texture texture) -> u32;
-MOON_API auto TextureGetSampleCount(Texture texture) -> u32;
-MOON_API auto TextureGetUsage(Texture texture) -> TextureUsage;
-MOON_API auto TextureGetWidth(Texture texture) -> u32;
-MOON_API void TextureSetLabel(Texture texture, char const *label);
-
-// Methods of TextureView
-MOON_API void TextureViewSetLabel(TextureView textureView, char const *label);
-
+MOON_API void SetProcs(const GPUProcTable *procs);
 } // namespace moon::gpu

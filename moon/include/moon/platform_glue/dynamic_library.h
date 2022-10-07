@@ -11,7 +11,7 @@
 #endif
 
 namespace moon {
-struct DynamicLibrary : public zinc::non_copyable {
+class DynamicLibrary : public zinc::non_copyable {
 public:
   static auto MOON_API LibraryExists(char const *name) -> bool;
   static auto MOON_API Load(char const *name) -> zinc::unique<DynamicLibrary>;

@@ -6,25 +6,26 @@
 #include "moon/platform_glue/display.h"
 
 namespace moon {
-struct Win32Display final : public Display {
+class Win32Display final : public Display {
 public:
   Win32Display(HMONITOR monitor);
 
-  [[nodiscard]] auto IsPrimary() const -> bool override;
-  [[nodiscard]] auto GetDeviceName() const -> zinc::string override;
-  [[nodiscard]] auto GetOffset() const -> Offset2D override;
-  auto ResetDisplayAttributes() -> bool override;
-  auto SetDisplayAttributes(DisplayAttributes const &attributes)
+  [[nodiscard]] auto is_primary() const -> bool override;
+  [[nodiscard]] auto get_device_name() const -> zinc::string override;
+  [[nodiscard]] auto get_offset() const -> Offset2D override;
+  auto reset_display_attributes() -> bool override;
+  auto set_display_attributes(DisplayAttributes const &attributes)
       -> bool override;
-  [[nodiscard]] auto GetDisplayAttributes() const -> DisplayAttributes override;
-  [[nodiscard]] auto GetDisplayModeList() const
+  [[nodiscard]] auto get_display_attributes() const
+      -> DisplayAttributes override;
+  [[nodiscard]] auto get_display_mode_list() const
       -> zinc::vector<DisplayAttributes> override;
 
-  [[nodiscard]] auto GetNative() const -> HMONITOR { return m_monitor; }
+  [[nodiscard]] auto get_native() const -> HMONITOR { return m_monitor; }
 
 private:
-  void GetInfo(MONITORINFO &info) const;
-  void GetInfo(MONITORINFOEX &info) const;
+  void get_info(MONITORINFO &info) const;
+  void get_info(MONITORINFOEX &info) const;
 
   HMONITOR m_monitor{nullptr};
 };

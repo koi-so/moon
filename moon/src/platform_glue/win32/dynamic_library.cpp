@@ -1,13 +1,16 @@
 #include "dynamic_library.h"
+#include <errhandlingapi.h>
+#include <iostream>
 
 namespace moon {
 static auto LoadLibrarySafe(char const *name) -> HMODULE {
   UINT prevMode = SetErrorMode(0);
-  SetErrorMode(prevMode | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
+  // SetErrorMode(prevMode | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
   wchar_t wname[256];
   MultiByteToWideChar(CP_UTF8, 0, name, -1, wname, sizeof(wname));
-  HMODULE module = LoadLibraryW(wname);
-  SetErrorMode(prevMode);
+  HMODULE module = LoadLibraryA(name);
+  std::cout << GetLastError() << std::endl;
+  // SetErrorMode(prevMode);
   return module;
 }
 
