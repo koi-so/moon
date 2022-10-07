@@ -2,10 +2,10 @@
 
 #include "moon/base.h"
 
-namespace moon {
+namespace moon::platform {
 struct MouseProperties {};
 
 struct WindowState {
   MouseProperties mouse;
 };
-} // namespace moon
+} // namespace moon::platform

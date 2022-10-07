@@ -4,7 +4,7 @@
 
 #include "display_attributes.h"
 
-namespace moon {
+namespace moon::platform {
 class MOON_API Display : public zinc::non_copyable {
 public:
   static auto count() -> usize;
@@ -37,4 +37,4 @@ protected:
   static void
   FinaliseDisplayModes(zinc::vector<DisplayAttributes> &display_attributes);
 };
-} // namespace moon
+} // namespace moon::platform

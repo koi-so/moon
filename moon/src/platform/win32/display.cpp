@@ -1,6 +1,6 @@
 #include "display.h"
 
-namespace moon {
+namespace moon::platform {
 struct Win32DisplayContainer {
   Win32DisplayContainer() = default;
   Win32DisplayContainer(zinc::unique<Win32Display> &&display, u32 cache_index)
@@ -273,4 +273,4 @@ auto Win32Display::get_info(MONITORINFOEX &info) const -> void {
   ::GetMonitorInfo(m_monitor, &info);
 }
 
-} // namespace moon
+} // namespace moon::platform

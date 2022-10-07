@@ -19,7 +19,3 @@
 #else
 #define MOON_API
 #endif
-
-#define NO_COPY(X)                                                             \
-  X(const X &) = delete;                                                       \
-  auto operator=(const X &)->X & = delete

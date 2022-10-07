@@ -2368,4 +2368,31 @@ struct GPUProcTable {
 };
 
 MOON_API void SetProcs(const GPUProcTable *procs);
+
 } // namespace moon::gpu
+
+using MoonSwapChainError = char const *;
+constexpr MoonSwapChainError kSwapChainErrorNone = {};
+
+struct MoonSwapChainNextTexture {
+  union {
+    vptr ptr;
+    u64 u64;
+    u32 u32;
+  } texture;
+};
+
+struct IMoonSwapChain {
+  void (*init)(vptr userdata, vptr impl_context);
+  void (*destroy)(vptr userdata);
+
+  MoonSwapChainError (*configure)(vptr userdata, WGPUTextureFormat format,
+                                  WGPUTextureUsage usage, u32 width,
+                                  u32 height);
+  MoonSwapChainError (*get_next_texture)(
+      vptr userdata, MoonSwapChainNextTexture *next_texture);
+  MoonSwapChainError (*present)(vptr userdata);
+
+  vptr userdata;
+  WGPUTextureUsage texture_usage;
+};

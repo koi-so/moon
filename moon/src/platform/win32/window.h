@@ -2,12 +2,12 @@
 
 #include "moon/base.h"
 
-#include "moon/platform_glue/context_handle.h"
-#include "moon/platform_glue/window.h"
-#include "moon/platform_glue/window_attributes.h"
-#include "moon/platform_glue/window_state.h"
+#include "moon/platform/context_handle.h"
+#include "moon/platform/window.h"
+#include "moon/platform/window_attributes.h"
+#include "moon/platform/window_state.h"
 
-namespace moon {
+namespace moon::platform {
 class Win32Window final : public Window {
 public:
   Win32Window(const WindowAttributes &desc);
@@ -38,4 +38,4 @@ private:
   ContextHandle m_context;
   HWND m_window;
 };
-} // namespace moon
+} // namespace moon::platform

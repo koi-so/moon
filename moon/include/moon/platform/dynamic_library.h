@@ -10,11 +10,11 @@
   using SYMBOL = RETURN(*) ARGS;
 #endif
 
-namespace moon {
+namespace moon::platform {
 class DynamicLibrary : public zinc::non_copyable {
 public:
   static auto MOON_API LibraryExists(char const *name) -> bool;
   static auto MOON_API Load(char const *name) -> zinc::unique<DynamicLibrary>;
   virtual auto LoadProcedure(char const *name) -> vptr = 0;
 };
-} // namespace moon
+} // namespace moon::platform

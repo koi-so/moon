@@ -9,7 +9,7 @@
 #define HID_USAGE_GENERIC_MOUSE ((USHORT)0x02)
 #endif
 
-namespace moon {
+namespace moon::platform {
 static auto GetWindowFromUserData(HWND window) -> Win32Window * {
   return reinterpret_cast<Win32Window *>(
       GetWindowLongPtrW(window, GWLP_USERDATA));
@@ -35,4 +35,4 @@ auto CALLBACK Win32WindowCallback(HWND window, UINT msg, WPARAM w_param,
   }
   return DefWindowProcW(window, msg, w_param, l_param);
 }
-} // namespace moon
+} // namespace moon::platform

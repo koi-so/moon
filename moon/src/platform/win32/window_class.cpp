@@ -1,10 +1,10 @@
 #include "window_class.h"
 
 #include "moon/base.h"
-#include "moon/platform_glue/platform_includes/prelude.h"
+#include "moon/platform/platform_includes/prelude.h"
 #include "window_callback.h"
 
-namespace moon {
+namespace moon::platform {
 Win32WindowClass::Win32WindowClass() {
   WNDCLASSEX wcex = {};
   wcex.cbSize = sizeof(WNDCLASSEX);
@@ -37,4 +37,4 @@ auto Win32WindowClass::get_class_name() const -> const wchar_t * {
   return class_name;
 }
 
-} // namespace moon
+} // namespace moon::platform

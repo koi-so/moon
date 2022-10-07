@@ -2,10 +2,10 @@
 
 #include "moon/base.h"
 
-#include "moon/platform_glue/context_handle.h"
-#include "moon/platform_glue/display.h"
+#include "moon/platform/context_handle.h"
+#include "moon/platform/display.h"
 
-namespace moon {
+namespace moon::platform {
 class Win32Display final : public Display {
 public:
   Win32Display(HMONITOR monitor);
@@ -29,4 +29,4 @@ private:
 
   HMONITOR m_monitor{nullptr};
 };
-} // namespace moon
+} // namespace moon::platform

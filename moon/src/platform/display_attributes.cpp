@@ -1,6 +1,6 @@
-#include "moon/platform_glue/display_attributes.h"
+#include "moon/platform/display_attributes.h"
 
-namespace moon {
+namespace moon::platform {
 auto MOON_API CompareDisplayStrictWeakOrder(DisplayAttributes const &lhs,
                                             DisplayAttributes const &rhs)
     -> bool {
@@ -28,4 +28,4 @@ auto MOON_API GetExtentRatio(Extent2D const &extent) -> Extent2D {
   auto gcd = ComputeGCD(extent.width, extent.height);
   return {extent.width / gcd, extent.height / gcd};
 }
-} // namespace moon
+} // namespace moon::platform

@@ -2,7 +2,7 @@
 
 #include "moon/base.h"
 
-namespace moon {
+namespace moon::platform {
 struct Extent2D {
   Extent2D() = default;
   inline Extent2D(u32 width, u32 height) : width{width}, height{height} {}
@@ -86,4 +86,4 @@ inline auto operator==(const Offset3D &lhs, const Offset3D &rhs) -> bool {
 inline auto operator!=(const Offset3D &lhs, const Offset3D &rhs) -> bool {
   return !(lhs == rhs);
 }
-} // namespace moon
+} // namespace moon::platform

@@ -2,7 +2,7 @@
 
 #include "window_class.h"
 
-namespace moon {
+namespace moon::platform {
 struct WindowAppearance {
   DWORD style = 0;
   Offset2D position{};
@@ -134,4 +134,4 @@ auto Win32Window::CreateWindowHandle(const WindowAttributes &attributes)
 
   return window;
 }
-} // namespace moon
+} // namespace moon::platform

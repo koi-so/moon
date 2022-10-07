@@ -4,7 +4,7 @@
 
 #include "window_attributes.h"
 
-namespace moon {
+namespace moon::platform {
 class Window : public zinc::non_copyable {
 public:
   static MOON_API auto Create(const WindowAttributes &attributes)
@@ -33,4 +33,4 @@ private:
   bool m_closed{false};
   bool m_focus{false};
 };
-} // namespace moon
+} // namespace moon::platform

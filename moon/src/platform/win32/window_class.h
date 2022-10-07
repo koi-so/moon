@@ -2,7 +2,7 @@
 
 #include "moon/base.h"
 
-namespace moon {
+namespace moon::platform {
 class Win32WindowClass : public zinc::non_copyable {
 public:
   ~Win32WindowClass();
@@ -13,4 +13,4 @@ public:
 private:
   Win32WindowClass();
 };
-} // namespace moon
+} // namespace moon::platform

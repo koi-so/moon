@@ -1,10 +1,10 @@
-#include "moon/platform_glue/window.h"
+#include "moon/platform/window.h"
 
 #if ZINC_PLATFORM_WINDOWS
 #include "win32/window.h"
 #endif
 
-namespace moon {
+namespace moon::platform {
 auto Window::Create(const WindowAttributes &attributes)
     -> zinc::unique<Window> {
 #if ZINC_PLATFORM_WINDOWS
@@ -19,4 +19,4 @@ auto Window::signal_close() -> void {
     m_closed = true;
   }
 }
-} // namespace moon
+} // namespace moon::platform

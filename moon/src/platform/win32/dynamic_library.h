@@ -2,10 +2,10 @@
 
 #include "moon/base.h"
 
-#include "moon/platform_glue/context_handle.h"
-#include "moon/platform_glue/dynamic_library.h"
+#include "moon/platform/context_handle.h"
+#include "moon/platform/dynamic_library.h"
 
-namespace moon {
+namespace moon::platform {
 class Win32DynamicLibrary final : public DynamicLibrary {
 public:
   Win32DynamicLibrary(char const *name);
@@ -16,4 +16,4 @@ public:
 private:
   HMODULE m_library{nullptr};
 };
-} // namespace moon
+} // namespace moon::platform

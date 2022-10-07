@@ -3,4 +3,4 @@
 #include "base.h"
 
 #include "gpu.h"
-#include "platform_glue.h"
+#include "platform.h"

@@ -4,7 +4,7 @@
 
 #include "spatial.h"
 
-namespace moon {
+namespace moon::platform {
 struct DisplayAttributes {
   Extent2D resolution;
   u32 refresh_rate{0};
@@ -26,4 +26,4 @@ auto MOON_API CompareDisplayStrictWeakOrder(DisplayAttributes const &lhs,
     -> bool;
 
 auto MOON_API GetExtentRatio(Extent2D const &extent) -> Extent2D;
-} // namespace moon
+} // namespace moon::platform

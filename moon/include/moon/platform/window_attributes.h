@@ -4,7 +4,7 @@
 
 #include "spatial.h"
 
-namespace moon {
+namespace moon::platform {
 struct WindowAttributes {
   zinc::string_view title;
   Extent2D size;
@@ -17,4 +17,4 @@ struct WindowAttributes {
   bool accept_drops{false};
   vptr context{nullptr};
 };
-} // namespace moon
+} // namespace moon::platform

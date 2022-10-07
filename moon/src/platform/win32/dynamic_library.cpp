@@ -2,7 +2,7 @@
 #include <errhandlingapi.h>
 #include <iostream>
 
-namespace moon {
+namespace moon::platform {
 static auto LoadLibrarySafe(char const *name) -> HMODULE {
   UINT prevMode = SetErrorMode(0);
   // SetErrorMode(prevMode | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
@@ -36,4 +36,4 @@ Win32DynamicLibrary::~Win32DynamicLibrary() { FreeLibrary(m_library); }
 auto Win32DynamicLibrary::LoadProcedure(char const *name) -> vptr {
   return reinterpret_cast<vptr>(GetProcAddress(m_library, name));
 }
-} // namespace moon
+} // namespace moon::platform
