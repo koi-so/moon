@@ -2,6 +2,8 @@
 
 #include "window_class.h"
 
+#include <shellapi.h>
+
 namespace moon::platform {
 struct WindowAppearance {
   DWORD style = 0;

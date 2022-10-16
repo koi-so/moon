@@ -8,7 +8,7 @@
 // #if MOON_EXPORTS
 // #define WGPU_IMPLEMENTATION 1
 // #endif
-#include "webgpu/webgpu.h"
+#include "api/webgpu.h"
 
 namespace moon::gpu {
 

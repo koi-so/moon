@@ -150,7 +150,7 @@ auto Display::toggle_cursor(bool show) -> bool {
 
 auto Display::is_cursor_visible() -> bool {
   bool visible;
-  if (moon::IsCursorVisible(visible))
+  if (moon::platform::IsCursorVisible(visible))
     return visible;
   return false;
 }
