@@ -20,9 +20,9 @@ public:
       -> zinc::unique<IAdapter>;
 
   void ensure_backend(BackendType type);
+  void connect_backend(Backend *backend, BackendType expected);
 
 private:
-  void connect_backend(Backend *backend, BackendType expected);
   static constexpr i8 MAX_BACKENDS = 10;
 
   zinc::vector<zinc::unique<Backend>> m_backends{};
