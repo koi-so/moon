@@ -2,13 +2,10 @@
 
 #include "moon/platform.h"
 
-#include <d3d12.h>
-#include <dxgi1_6.h>
-
 #include "adapter.h"
 
 #ifdef MOON_GPU_D3D12_AGILITY
-#define EXPORT_AGILITY_SDK extern "C" _declspec(dllexport) extern
+#define EXPORT_AGILITY_SDK extern "C" _declspec(dllexport)
 #else
 #define EXPORT_AGILITY_SDK
 #endif
@@ -18,12 +15,13 @@ EXPORT_AGILITY_SDK const char *D3D12SDKPath = u8".\\D3D12\\";
 
 auto EnableAgilitySDKIfExist(u32 version, const zinc::string_view &path)
     -> bool {
-  if (not moon::platform::DynamicLibrary::LibraryExists("d3d12.dll"))
+  if (!moon::platform::DynamicLibrary::LibraryExists("d3d12.dll")) {
     return false;
+  }
 
-  auto d3d12 = moon::platform::DynamicLibrary::Load("d3d12.dll");
+  auto lib = moon::platform::DynamicLibrary::Load("d3d12.dll");
   auto D3D12GetInterfacePfn =
-      (PFN_D3D12_GET_INTERFACE)d3d12->LoadProcedure("D3D12GetInterface");
+      (::PFN_D3D12_GET_INTERFACE)lib->LoadProcedure("D3D12GetInterface");
   if (!D3D12GetInterfacePfn) {
     return false;
   }
@@ -86,9 +84,10 @@ auto DX12Instance::get_adapters() -> zinc::vector<zinc::shared<gpu::Adapter>> {
     if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
       continue;
 
-    adapters.emplace_back(zinc::make_shared<DX12Adapter>(*this, adapter));
+    auto x = zinc::make_shared<DX12Adapter>(*this, adapter);
+    adapters.push_back(std::move(x));
   }
-  return adapters;
+  return std::move(adapters);
 }
 
 auto DX12Instance::get_factory() -> ComPtr<IDXGIFactory4> {

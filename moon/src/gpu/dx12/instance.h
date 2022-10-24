@@ -5,7 +5,7 @@
 #include "common.h"
 
 namespace moon::gpu::dx12 {
-class DX12Instance : public gpu::Instance {
+class MOON_API DX12Instance : public gpu::Instance {
 public:
   DX12Instance();
   auto get_adapters() -> zinc::vector<zinc::shared<gpu::Adapter>> override;

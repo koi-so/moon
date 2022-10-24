@@ -1,5 +1,9 @@
 #include "moon/gpu.h"
 
+#if MOON_GPU_DX12
+#include "dx12/instance.h"
+#endif
+
 namespace moon::gpu {
 auto CreateInstance(BackendType type) -> zinc::shared<Instance> {
   switch (type) {
@@ -14,8 +18,8 @@ auto CreateInstance(BackendType type) -> zinc::shared<Instance> {
 #endif
     break;
   case BackendType::eD3D12:
-#if MOON_GPU_D3D12
-    return zinc::make_shared<d3d12::Instance>();
+#if MOON_GPU_DX12
+    return zinc::make_shared<dx12::DX12Instance>();
 #endif
     break;
   };

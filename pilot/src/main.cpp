@@ -1,12 +1,6 @@
 #include "moon/moon.h"
-#include "zinc/allocator/sys.h"
 
 #include <iostream>
-
-using zinc::as;
-
-auto rac(WGPURequestAdapterStatus status, WGPUAdapter adapter,
-         char const *message, void *userdata) {}
 
 auto main() -> int {
   auto window_attr = moon::platform::WindowAttributes{};
@@ -16,6 +10,12 @@ auto main() -> int {
   window_attr.visible = true;
 
   auto u_window = moon::platform::Window::Create(window_attr);
+  auto instance = moon::gpu::CreateInstance(moon::gpu::BackendType::eD3D12);
+  auto adapters = instance->get_adapters();
+  for (auto &adapter : adapters) {
+    std::cout << adapter->get_name().data() << std::endl;
+  }
+
   while (!u_window->has_closed()) {
     u_window->pump_events();
   }
