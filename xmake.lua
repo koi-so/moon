@@ -2,8 +2,10 @@ add_repositories("koiso https://github.com/koi-so/pkgindex.git main")
 
 if is_mode("debug") then
 	add_rules("mode.debug")
+	set_runtimes("MDd")
 elseif is_mode("release") then
 	add_rules("mode.release")
+	set_runtimes("MD")
 end
 
 add_requires("zinc main", { configs = { shared = true } })
