@@ -6,11 +6,11 @@
 #include "moon/math.h"
 
 namespace moon::gpu {
-// class BindingSetLayout;
-// class Program;
-// class RenderPass;
-// class Resource;
-// class View;
+class BindingSetLayout;
+class Program;
+class RenderPass;
+class Resource;
+class View;
 
 enum class BackendType {
   eVulkan,
@@ -477,7 +477,7 @@ enum class Format {
   LAST = RG3B2_UNORM_PACK8
 };
 
-struct ViewDesc {
+struct ViewDescriptor {
   ViewType view_type = ViewType::eUnknown;
   ViewDimension dimension = ViewDimension::eUnknown;
   u32 base_mip_level = 0;
@@ -499,15 +499,15 @@ struct ViewDesc {
   }
 };
 
-struct ShaderDesc {
+struct ShaderDescriptor {
   zinc::vector<u8> shader_data;
   zinc::string entrypoint;
   ShaderType type;
   zinc::string model;
   // std::map<zinc::string, zinc::string> define;
 
-  ShaderDesc(zinc::vector<u8> shader_data, zinc::string entrypoint,
-             ShaderType type, zinc::string model)
+  ShaderDescriptor(zinc::vector<u8> shader_data, zinc::string entrypoint,
+                   ShaderType type, zinc::string model)
       : shader_data(std::move(shader_data)), entrypoint(std::move(entrypoint)),
         type(type), model(std::move(model)) {}
 };
@@ -568,41 +568,41 @@ struct RenderPassDescriptor {
   }
 };
 
-// struct FramebufferDescriptor {
-//   zinc::shared<RenderPass> render_pass;
-//   u32 width;
-//   u32 height;
-//   zinc::vector<zinc::shared<View>> colors;
-//   zinc::shared<View> depth_stencil;
-//   zinc::shared<View> shading_rate_image;
+struct FramebufferDescriptor {
+  zinc::shared<RenderPass> render_pass;
+  u32 width;
+  u32 height;
+  zinc::vector<zinc::shared<View>> colors;
+  zinc::shared<View> depth_stencil;
+  zinc::shared<View> shading_rate_image;
 
-//   [[nodiscard]] auto tied() const {
-//     return zinc::tie(render_pass, width, height, colors, depth_stencil,
-//                      shading_rate_image);
-//   }
-// };
+  [[nodiscard]] auto tied() const {
+    return zinc::tie(render_pass, width, height, colors, depth_stencil,
+                     shading_rate_image);
+  }
+};
 
-// struct GraphicsPipelineDescriptor {
-//   zinc::shared<Program> program;
-//   zinc::shared<BindingSetLayout> layout;
-//   zinc::vector<InputLayoutDesc> input;
-//   zinc::shared<RenderPass> render_pass;
-//   DepthStencilDescriptor depth_stencil_desc;
-//   BlendDescriptor blend_desc;
-//   RasterizerDescriptor rasterizer_desc;
+struct GraphicsPipelineDescriptor {
+  zinc::shared<Program> program;
+  zinc::shared<BindingSetLayout> layout;
+  zinc::vector<InputLayoutDesc> input;
+  zinc::shared<RenderPass> render_pass;
+  DepthStencilDescriptor depth_stencil_desc;
+  BlendDescriptor blend_desc;
+  RasterizerDescriptor rasterizer_desc;
 
-//   [[nodiscard]] auto tied() const {
-//     return zinc::tie(program, layout, input, render_pass, depth_stencil_desc,
-//                      blend_desc, rasterizer_desc);
-//   }
-// };
+  [[nodiscard]] auto tied() const {
+    return zinc::tie(program, layout, input, render_pass, depth_stencil_desc,
+                     blend_desc, rasterizer_desc);
+  }
+};
 
-// struct ComputePipelineDescriptor {
-//   zinc::shared<Program> program;
-//   zinc::shared<BindingSetLayout> layout;
+struct ComputePipelineDescriptor {
+  zinc::shared<Program> program;
+  zinc::shared<BindingSetLayout> layout;
 
-//   [[nodiscard]] auto tied() const { return zinc::tie(program, layout); }
-// };
+  [[nodiscard]] auto tied() const { return zinc::tie(program, layout); }
+};
 
 enum class RayTracingShaderGroupType {
   eGeneral,
@@ -622,28 +622,27 @@ struct RayTracingShaderGroup {
   }
 };
 
-// struct RayTracingPipelineDescriptor {
-//   zinc::shared<Program> program;
-//   zinc::shared<BindingSetLayout> layout;
-//   zinc::vector<RayTracingShaderGroup> groups;
+struct RayTracingPipelineDescriptor {
+  zinc::shared<Program> program;
+  zinc::shared<BindingSetLayout> layout;
+  zinc::vector<RayTracingShaderGroup> groups;
 
-//   [[nodiscard]] auto tied() const { return zinc::tie(program, layout,
-//   groups); }
-// };
+  [[nodiscard]] auto tied() const { return zinc::tie(program, layout, groups); }
+};
 
-// struct RayTracingShaderTable {
-//   zinc::shared<Resource> resource;
-//   u64 offset;
-//   u64 size;
-//   u64 stride;
-// };
+struct RayTracingShaderTable {
+  zinc::shared<Resource> resource;
+  u64 offset;
+  u64 size;
+  u64 stride;
+};
 
-// struct RayTracingShaderTables {
-//   RayTracingShaderTable raygen;
-//   RayTracingShaderTable miss;
-//   RayTracingShaderTable hit;
-//   RayTracingShaderTable callable;
-// };
+struct RayTracingShaderTables {
+  RayTracingShaderTable raygen;
+  RayTracingShaderTable miss;
+  RayTracingShaderTable hit;
+  RayTracingShaderTable callable;
+};
 
 struct BindKey {
   ShaderType shader_type = ShaderType::eUnknown;
@@ -657,12 +656,12 @@ struct BindKey {
   }
 };
 
-// struct BindingDescriptor {
-//   BindKey bind_key;
-//   zinc::shared<View> view;
+struct BindingDescriptor {
+  BindKey bind_key;
+  zinc::shared<View> view;
 
-//   [[nodiscard]] auto tied() const { return zinc::tie(bind_key, view); }
-// };
+  [[nodiscard]] auto tied() const { return zinc::tie(bind_key, view); }
+};
 
 enum class ReturnType {
   eUnknown,
@@ -689,12 +688,12 @@ enum class PipelineType {
   eRayTracing,
 };
 
-// struct BufferDescriptor {
-//   zinc::shared<Resource> res;
-//   Format format = Format::UNDEFINED;
-//   u32 count = 0;
-//   u32 offset = 0;
-// };
+struct BufferDescriptor {
+  zinc::shared<Resource> res;
+  Format format = Format::UNDEFINED;
+  u32 count = 0;
+  u32 offset = 0;
+};
 
 enum class RaytracingInstanceFlags : u32 {
   eNone = 0x0,
@@ -710,11 +709,11 @@ enum class RaytracingGeometryFlags {
   eNoDuplicateAnyHitInvocation
 };
 
-// struct RaytracingGeometryDesc {
-//   BufferDescriptor vertex;
-//   BufferDescriptor index;
-//   RaytracingGeometryFlags flags = RaytracingGeometryFlags::eNone;
-// };
+struct RaytracingGeometryDesc {
+  BufferDescriptor vertex;
+  BufferDescriptor index;
+  RaytracingGeometryFlags flags = RaytracingGeometryFlags::eNone;
+};
 
 enum class MemoryType { eDefault, eUpload, eReadback };
 
@@ -766,15 +765,15 @@ struct RaytracingGeometryInstance {
 
 static_assert(sizeof(RaytracingGeometryInstance) == 64);
 
-// struct ResourceBarrierDescriptor {
-//   zinc::shared<Resource> resource;
-//   ResourceState state_before;
-//   ResourceState state_after;
-//   u32 base_mip_level = 0;
-//   u32 level_count = 1;
-//   u32 base_array_layer = 0;
-//   u32 layer_count = 1;
-// };
+struct ResourceBarrierDescriptor {
+  zinc::shared<Resource> resource;
+  ResourceState state_before;
+  ResourceState state_after;
+  u32 base_mip_level = 0;
+  u32 level_count = 1;
+  u32 base_array_layer = 0;
+  u32 layer_count = 1;
+};
 
 enum class ShadingRate : u8 {
   e1x1 = 0,
