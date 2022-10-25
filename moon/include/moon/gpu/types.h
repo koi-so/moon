@@ -512,7 +512,7 @@ struct ShaderDescriptor {
         type(type), model(std::move(model)) {}
 };
 
-struct InputLayoutDesc {
+struct InputLayoutDescriptor {
   u32 slot = 0;
   zinc::string semantic_name;
   Format format = Format::UNDEFINED;
@@ -568,7 +568,7 @@ struct RenderPassDescriptor {
   }
 };
 
-struct FramebufferDescriptor {
+struct FrameBufferDescriptor {
   zinc::shared<RenderPass> render_pass;
   u32 width;
   u32 height;
@@ -585,7 +585,7 @@ struct FramebufferDescriptor {
 struct GraphicsPipelineDescriptor {
   zinc::shared<Program> program;
   zinc::shared<BindingSetLayout> layout;
-  zinc::vector<InputLayoutDesc> input;
+  zinc::vector<InputLayoutDescriptor> input;
   zinc::shared<RenderPass> render_pass;
   DepthStencilDescriptor depth_stencil_desc;
   BlendDescriptor blend_desc;
@@ -850,6 +850,12 @@ struct DispatchIndirectCommand {
   u32 thread_group_count_y;
   u32 thread_group_count_z;
 };
+
+using IndirectCountType = u32;
+
+constexpr uint64_t eAccelerationStructureAlignment = 256;
+
+enum class QueryHeapType { eAccelerationStructureCompactedSize };
 
 } // namespace moon::gpu
 

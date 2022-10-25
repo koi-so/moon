@@ -2,9 +2,15 @@
 
 #include "moon/base.h"
 
+#include "binding_set.h"
 #include "command_queue.h"
+#include "frame_buffer.h"
 #include "memory.h"
+#include "pipeline.h"
+#include "query_heap.h"
 #include "resource.h"
+#include "shader.h"
+#include "swapchain.h"
 #include "types.h"
 
 namespace moon::gpu {
@@ -47,8 +53,8 @@ public:
   create_binding_set(zinc::shared<BindingSetLayout> const &layout) = 0;
   virtual zinc::shared<RenderPass>
   create_render_pass(RenderPassDescriptor const &desc) = 0;
-  virtual zinc::shared<Framebuffer>
-  create_framebuffer(FramebufferDescriptor const &desc) = 0;
+  virtual zinc::shared<FrameBuffer>
+  create_frame_buffer(FrameBufferDescriptor const &desc) = 0;
   virtual zinc::shared<Shader> create_shader(zinc::vector<u8> const &blob,
                                              ShaderBlobType blob_type,
                                              ShaderType shader_type) = 0;
