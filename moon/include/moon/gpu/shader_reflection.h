@@ -29,13 +29,13 @@ struct EntryPoint {
   u32 attribute_size;
 };
 
-struct InputParameterDesc {
+struct InputParameterDescriptor {
   u32 location;
   zinc::string semantic_name;
   Format format;
 };
 
-struct OutputParameterDesc {
+struct OutputParameterDescriptor {
   u32 slot;
 };
 
@@ -73,9 +73,9 @@ public:
   virtual auto get_variable_layouts() const
       -> const zinc::vector<VariableLayout> & = 0;
   virtual auto get_input_parameters() const
-      -> const zinc::vector<InputParameterDesc> & = 0;
+      -> const zinc::vector<InputParameterDescriptor> & = 0;
   virtual auto get_output_parameters() const
-      -> const zinc::vector<OutputParameterDesc> & = 0;
+      -> const zinc::vector<OutputParameterDescriptor> & = 0;
   virtual auto get_shader_feature_info() const -> const ShaderFeatureInfo & = 0;
 };
 } // namespace moon::gpu
