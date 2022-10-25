@@ -29,10 +29,9 @@ public:
       -> zinc::shared<CommandQueue> = 0;
   [[nodiscard]] virtual auto get_texture_data_pitch_alignment() const
       -> u32 = 0;
-  virtual zinc::shared<Swapchain> create_swapchain(WindowHandle window,
-                                                   u32 width, u32 height,
-                                                   u32 frame_count,
-                                                   bool vsync) = 0;
+  virtual auto create_swapchain(WindowHandle window, u32 width, u32 height,
+                                u32 frame_count, bool vsync)
+      -> zinc::shared<Swapchain> = 0;
   virtual auto create_command_list(CommandListType type)
       -> zinc::shared<CommandList> = 0;
   virtual auto create_fence(u64 initial_value) -> zinc::shared<Fence> = 0;
@@ -49,30 +48,32 @@ public:
       -> zinc::shared<View> = 0;
   virtual auto create_binding_set_layout(zinc::vector<BindKey> const &descs)
       -> zinc::shared<BindingSetLayout> = 0;
-  virtual zinc::shared<BindingSet>
-  create_binding_set(zinc::shared<BindingSetLayout> const &layout) = 0;
-  virtual zinc::shared<RenderPass>
-  create_render_pass(RenderPassDescriptor const &desc) = 0;
-  virtual zinc::shared<FrameBuffer>
-  create_frame_buffer(FrameBufferDescriptor const &desc) = 0;
-  virtual zinc::shared<Shader> create_shader(zinc::vector<u8> const &blob,
-                                             ShaderBlobType blob_type,
-                                             ShaderType shader_type) = 0;
-  virtual zinc::shared<Shader> compile_shader(ShaderDescriptor const &desc) = 0;
-  virtual zinc::shared<Program>
-  create_program(zinc::vector<zinc::shared<Shader>> const &shaders) = 0;
-  virtual zinc::shared<Pipeline>
-  create_graphics_pipeline(GraphicsPipelineDescriptor const &desc) = 0;
-  virtual zinc::shared<Pipeline>
-  create_compute_pipeline(ComputePipelineDescriptor const &desc) = 0;
-  virtual zinc::shared<Pipeline>
-  create_ray_tracing_pipeline(RayTracingPipelineDescriptor const &desc) = 0;
+  virtual auto create_binding_set(zinc::shared<BindingSetLayout> const &layout)
+      -> zinc::shared<BindingSet> = 0;
+  virtual auto create_render_pass(RenderPassDescriptor const &desc)
+      -> zinc::shared<RenderPass> = 0;
+  virtual auto create_frame_buffer(FrameBufferDescriptor const &desc)
+      -> zinc::shared<FrameBuffer> = 0;
+  virtual auto create_shader(zinc::vector<u8> const &blob,
+                             ShaderBlobType blob_type, ShaderType shader_type)
+      -> zinc::shared<Shader> = 0;
+  virtual auto compile_shader(ShaderDescriptor const &desc)
+      -> zinc::shared<Shader> = 0;
+  virtual auto create_program(zinc::vector<zinc::shared<Shader>> const &shaders)
+      -> zinc::shared<Program> = 0;
+  virtual auto create_graphics_pipeline(GraphicsPipelineDescriptor const &desc)
+      -> zinc::shared<Pipeline> = 0;
+  virtual auto create_compute_pipeline(ComputePipelineDescriptor const &desc)
+      -> zinc::shared<Pipeline> = 0;
+  virtual auto
+  create_ray_tracing_pipeline(RayTracingPipelineDescriptor const &desc)
+      -> zinc::shared<Pipeline> = 0;
   virtual auto
   create_acceleration_structure(AccelerationStructureType type,
                                 zinc::shared<Resource> const &resource,
                                 u64 offset) -> zinc::shared<Resource> = 0;
-  virtual zinc::shared<QueryHeap> create_query_heap(QueryHeapType type,
-                                                    u32 count) = 0;
+  virtual auto create_query_heap(QueryHeapType type, u32 count)
+      -> zinc::shared<QueryHeap> = 0;
   [[nodiscard]] virtual auto is_dxr_supported() const -> bool = 0;
   [[nodiscard]] virtual auto is_ray_query_supported() const -> bool = 0;
   [[nodiscard]] virtual auto is_variable_rate_shading_supported() const
