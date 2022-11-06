@@ -8,31 +8,31 @@ elseif is_mode("release") then
 	set_runtimes("MD")
 end
 
-add_requires("zinc main", { configs = { shared = true } })
+add_requires("eastl master", { configs = { shared = true } })
 add_requires("directx-headers main", {})
 
-target("moon")
+target("rook")
 	set_kind("shared")
-	add_includedirs("moon/include", { public = true })
-	add_defines("MOON_CONFIG_SHARED_LIB", "MOON_EXPORTS")
+	add_includedirs("rook/include", { public = true })
+	add_defines("ROOK_CONFIG_SHARED_LIB", "ROOK_EXPORTS")
 	set_languages("cxx17")
 	-- not including platform code
-	add_files("moon/src/**.cpp|platform/*/**.cpp|gpu/*/**.cpp")
+	add_files("rook/src/**.cpp|platform/*/**.cpp|gpu/*/**.cpp")
 
 	if is_plat("windows") then
 		add_syslinks("User32", "Shell32", "Gdi32", "Kernel32", "DXGI", "D3D12")
-		add_files("moon/src/platform/win32/**.cpp")
-		add_files("moon/src/gpu/dx12/**.cpp")
-		add_defines("MOON_GPU_DX12")
+		add_files("rook/src/platform/win32/**.cpp")
+		add_files("rook/src/gpu/dx12/**.cpp")
+		add_defines("ROOK_GPU_DX12")
 	end
 
-	add_packages("zinc")
+	add_packages("eastl")
 	add_packages("directx-headers")
 
 target("pilot")
 	set_kind("binary")
 	add_files("pilot/src/**.cpp")
 	set_languages("cxx17")
-	add_defines("MOON_CONFIG_SHARED_LIB")
-	add_deps("moon")
-	add_packages("zinc")
+	add_defines("ROOK_CONFIG_SHARED_LIB")
+	add_deps("rook")
+	add_packages("eastl")
