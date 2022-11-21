@@ -24,6 +24,8 @@ public:
   [[nodiscard]] virtual auto
   get_input_layout_location(eastl::string const &semantic_name) const
       -> uint32_t = 0;
+  [[nodiscard]] virtual auto get_bindings() const
+      -> eastl::vector<BindKey> const & = 0;
   // TODO: Shader reflection
   // virtual const std::shared_ptr<ShaderReflection> &GetReflection() const = 0;
 };

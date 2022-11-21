@@ -1,9 +1,8 @@
 #include "device.h"
 
-#include ""
 #include "adapter.h"
 #include "memory.h"
-
+#include "swapchain.h"
 
 namespace rook::gpu::dx12 {
 auto ConvertState(ResourceState state) -> D3D12_RESOURCE_STATES {
@@ -170,8 +169,7 @@ auto DX12Device::allocate_memory(uint64_t size, MemoryType memory_type,
 
 auto DX12Device::get_command_queue(CommandListType type)
     -> eastl::shared_ptr<CommandQueue> {
-  return eastl::reinterpret_pointer_cast<CommandQueue>(
-      m_command_queues.at(type));
+  return eastl::static_pointer_cast<CommandQueue>(m_command_queues.at(type));
 };
 
 auto DX12Device::get_texture_data_pitch_alignment() const -> uint32_t {

@@ -11,6 +11,19 @@ public:
   static constexpr size_t size = N;
   using value_type = T;
 
+  vec() = default;
+  vec(vec const &) = default;
+  vec(vec &&) = default;
+  vec &operator=(vec const &) = default;
+  vec &operator=(vec &&) = default;
+
+  vec(T x = 0, T y = 0, T z = 0, T w = 0) {
+    m_data[0] = x;
+    m_data[1] = y;
+    m_data[2] = z;
+    m_data[3] = w;
+  }
+
 private:
   value_type m_data[N]{};
 

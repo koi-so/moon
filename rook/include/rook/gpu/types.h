@@ -720,7 +720,7 @@ enum class RaytracingGeometryFlags {
   eNoDuplicateAnyHitInvocation
 };
 
-struct RaytracingGeometryDesc {
+struct RaytracingGeometryDescriptor {
   BufferDescriptor vertex;
   BufferDescriptor index;
   RaytracingGeometryFlags flags = RaytracingGeometryFlags::eNone;

@@ -80,9 +80,9 @@ public:
   [[nodiscard]] auto get_shader_group_handle_size() const -> uint32_t override;
   [[nodiscard]] auto get_shader_record_alignment() const -> uint32_t override;
   [[nodiscard]] auto get_shader_table_alignment() const -> uint32_t override;
-  [[nodiscard]] auto
-  get_blas_prebuild_info(const eastl::vector<RaytracingGeometryDesc> &descs,
-                         BuildAccelerationStructureFlags flags) const
+  [[nodiscard]] auto get_blas_prebuild_info(
+      const eastl::vector<RaytracingGeometryDescriptor> &descs,
+      BuildAccelerationStructureFlags flags) const
       -> RaytracingASPrebuildInfo override;
   [[nodiscard]] auto
   get_tlas_prebuild_info(uint32_t instance_count,
@@ -126,9 +126,9 @@ private:
 
 auto ConvertState(ResourceState state) -> D3D12_RESOURCE_STATES;
 auto GetHeapType(MemoryType memory_type) -> D3D12_HEAP_TYPE;
-auto FillRaytracingGeometryDesc(const BufferDescriptor &vertex,
-                                const BufferDescriptor &index,
-                                RaytracingGeometryFlags flags)
+auto FillRaytracingGeometryDescriptor(const BufferDescriptor &vertex,
+                                      const BufferDescriptor &index,
+                                      RaytracingGeometryFlags flags)
     -> D3D12_RAYTRACING_GEOMETRY_DESC;
 auto Convert(BuildAccelerationStructureFlags flags)
     -> D3D12_RAYTRACING_ACCELERATION_STRUCTURE_BUILD_FLAGS;

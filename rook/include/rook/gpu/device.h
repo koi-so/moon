@@ -8,6 +8,7 @@
 #include "memory.h"
 #include "pipeline.h"
 #include "query_heap.h"
+#include "render_pass.h"
 #include "resource.h"
 #include "shader.h"
 #include "swapchain.h"
@@ -97,9 +98,9 @@ public:
   [[nodiscard]] virtual auto get_shader_record_alignment() const
       -> uint32_t = 0;
   [[nodiscard]] virtual auto get_shader_table_alignment() const -> uint32_t = 0;
-  [[nodiscard]] virtual auto
-  get_blas_prebuild_info(const eastl::vector<RaytracingGeometryDesc> &descs,
-                         BuildAccelerationStructureFlags flags) const
+  [[nodiscard]] virtual auto get_blas_prebuild_info(
+      const eastl::vector<RaytracingGeometryDescriptor> &descs,
+      BuildAccelerationStructureFlags flags) const
       -> RaytracingASPrebuildInfo = 0;
   [[nodiscard]] virtual auto
   get_tlas_prebuild_info(uint32_t instance_count,
