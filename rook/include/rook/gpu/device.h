@@ -48,7 +48,7 @@ public:
       -> eastl::shared_ptr<Resource> = 0;
   virtual auto create_sampler(SamplerDescriptor const &desc)
       -> eastl::shared_ptr<Resource> = 0;
-  virtual auto create_view(eastl::shared_ptr<Resource> const resource,
+  virtual auto create_view(eastl::shared_ptr<Resource> const &resource,
                            ViewDescriptor const &view_desc)
       -> eastl::shared_ptr<View> = 0;
   virtual auto create_binding_set_layout(eastl::vector<BindKey> const &descs)

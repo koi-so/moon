@@ -1,8 +1,15 @@
 #include "device.h"
 
 #include "adapter.h"
+#include "command_list.h"
+#include "fence.h"
 #include "memory.h"
+#include "resource.h"
 #include "swapchain.h"
+#include "view.h"
+
+#include "format_helper.h"
+#include "format_translate.h"
 
 namespace rook::gpu::dx12 {
 auto ConvertState(ResourceState state) -> D3D12_RESOURCE_STATES {
@@ -181,5 +188,163 @@ auto DX12Device::create_swapchain(WindowHandle window, uint32_t width,
                                   bool vsync) -> eastl::shared_ptr<Swapchain> {
   return eastl::make_shared<DX12Swapchain>(*this, window, width, height,
                                            frame_count, vsync);
+}
+
+auto DX12Device::create_command_list(CommandListType type)
+    -> eastl::shared_ptr<CommandList> {
+  return eastl::make_shared<DX12CommandList>(*this, type);
+}
+
+auto DX12Device::create_fence(uint64_t initial_value)
+    -> eastl::shared_ptr<Fence> {
+  return eastl::make_shared<DX12Fence>(*this, initial_value);
+}
+
+auto DX12Device::create_texture(TextureType type, uint32_t bind_flag,
+                                Format format, uint32_t sample_count, int width,
+                                int height, int depth, int mip_levels)
+    -> eastl::shared_ptr<Resource> {
+  DXGI_FORMAT dx_format = static_cast<DXGI_FORMAT>(
+      TranslateFormatToDX12Format(format).DXGIFormat.DDS);
+  if (bind_flag &
+      static_cast<uint32_t>(static_cast<uint32_t>(BindFlag::eShaderResource))) {
+    dx_format = MakeTypelessDepthStencil(dx_format);
+  }
+
+  eastl::shared_ptr<DX12Resource> res = eastl::make_shared<DX12Resource>(*this);
+  res->p_resource_type = ResourceType::eTexture;
+  res->p_format = format;
+
+  D3D12_RESOURCE_DESC desc = {};
+  switch (type) {
+  case TextureType::e1D:
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE1D;
+    break;
+  case TextureType::e2D:
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    break;
+  case TextureType::e3D:
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE3D;
+    break;
+  }
+  desc.Width = width;
+  desc.Height = height;
+  desc.DepthOrArraySize = depth;
+  desc.MipLevels = mip_levels;
+  desc.Format = dx_format;
+
+  D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS ms_check_desc = {};
+  ms_check_desc.Format = desc.Format;
+  ms_check_desc.SampleCount = sample_count;
+  m_device->CheckFeatureSupport(D3D12_FEATURE_MULTISAMPLE_QUALITY_LEVELS,
+                                &ms_check_desc, sizeof(ms_check_desc));
+  desc.SampleDesc.Count = sample_count;
+  desc.SampleDesc.Quality = ms_check_desc.NumQualityLevels - 1;
+
+  if (bind_flag &
+      static_cast<uint32_t>(static_cast<uint32_t>(BindFlag::eRenderTarget)))
+    desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+  if (bind_flag &
+      static_cast<uint32_t>(static_cast<uint32_t>(BindFlag::eDepthStencil)))
+    desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+  if (bind_flag &
+      static_cast<uint32_t>(static_cast<uint32_t>(BindFlag::eUnorderedAccess)))
+    desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+
+  res->p_desc = desc;
+  res->set_initial_state(ResourceState::eCommon);
+  // return eastl::static_pointer_cast<Resource>(res);
+  return res;
+}
+
+auto DX12Device::create_buffer(uint32_t bind_flag, uint32_t buffer_size)
+    -> eastl::shared_ptr<Resource> {
+  if (buffer_size == 0)
+    return {};
+
+  eastl::shared_ptr<DX12Resource> res = eastl::make_shared<DX12Resource>(*this);
+
+  if (bind_flag & static_cast<uint32_t>(BindFlag::eConstantBuffer))
+    buffer_size = (buffer_size + 255) & ~255;
+
+  auto desc = CD3DX12_RESOURCE_DESC::Buffer(buffer_size);
+
+  res->p_resource_type = ResourceType::eBuffer;
+
+  ResourceState state = ResourceState::eCommon;
+  if (bind_flag & static_cast<uint32_t>(BindFlag::eRenderTarget)) {
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+  }
+  if (bind_flag & static_cast<uint32_t>(BindFlag::eDepthStencil)) {
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+  }
+  if (bind_flag & static_cast<uint32_t>(BindFlag::eUnorderedAccess)) {
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+  }
+  if (bind_flag & static_cast<uint32_t>(BindFlag::eAccelerationStructure)) {
+    state = ResourceState::eRaytracingAccelerationStructure;
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+  }
+
+  res->p_desc = desc;
+  res->set_initial_state(state);
+  return res;
+}
+
+auto DX12Device::create_sampler(const SamplerDescriptor &desc)
+    -> eastl::shared_ptr<Resource> {
+
+  eastl::shared_ptr<DX12Resource> res = eastl::make_shared<DX12Resource>(*this);
+  D3D12_SAMPLER_DESC &sampler_desc = res->p_sampler_desc;
+
+  switch (desc.filter) {
+  case SamplerFilter::eAnisotropic:
+    sampler_desc.Filter = D3D12_FILTER_ANISOTROPIC;
+    break;
+  case SamplerFilter::eMinMagMipLinear:
+    sampler_desc.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+    break;
+  case SamplerFilter::eComparisonMinMagMipLinear:
+    sampler_desc.Filter = D3D12_FILTER_COMPARISON_MIN_MAG_MIP_LINEAR;
+    break;
+  }
+
+  switch (desc.mode) {
+  case SamplerTextureAddressMode::eWrap:
+    sampler_desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    sampler_desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    sampler_desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+    break;
+  case SamplerTextureAddressMode::eClamp:
+    sampler_desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    sampler_desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    sampler_desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    break;
+  }
+
+  switch (desc.func) {
+  case SamplerComparisonFunc::eNever:
+    sampler_desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+    break;
+  case SamplerComparisonFunc::eAlways:
+    sampler_desc.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+    break;
+  case SamplerComparisonFunc::eLess:
+    sampler_desc.ComparisonFunc = D3D12_COMPARISON_FUNC_LESS;
+    break;
+  }
+
+  sampler_desc.MinLOD = 0;
+  sampler_desc.MaxLOD = eastl::numeric_limits<float>::max();
+  sampler_desc.MaxAnisotropy = 1;
+
+  return res;
+}
+
+auto DX12Device::create_view(eastl::shared_ptr<Resource> const &resource,
+                             ViewDescriptor const &view_desc)
+    -> eastl::shared_ptr<View> {
+  return eastl::make_shared<DX12View>(
+      *this, eastl::static_pointer_cast<DX12Resource>(resource), view_desc);
 }
 } // namespace rook::gpu::dx12

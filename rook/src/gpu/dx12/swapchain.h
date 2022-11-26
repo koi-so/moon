@@ -22,7 +22,7 @@ public:
 private:
   DX12CommandQueue &m_command_queue;
   bool m_vsync;
-  ComPtr<IDXGISwapChain3> m_swapchain;
+  ComPtr<IDXGISwapChain3> m_swap_chain;
   eastl::vector<eastl::shared_ptr<Resource>> m_back_buffers;
 };
 } // namespace rook::gpu::dx12

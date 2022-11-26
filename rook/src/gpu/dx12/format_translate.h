@@ -11,7 +11,7 @@ namespace rook::gpu::dx12 {
                   (((std::uint32_t)(std::uint8_t)(ch1) << 8) & 0x0000FF00) |   \
                   ((std::uint32_t)(std::uint8_t)(ch0)&0x000000FF))
 
-enum d3dfmt {
+enum struct d3dfmt {
   D3DFMT_UNKNOWN = 0,
 
   D3DFMT_R8G8B8 = 20,
@@ -113,7 +113,7 @@ enum d3dfmt {
   D3DFMT_FORCE_DWORD = 0x7fffffff
 };
 
-enum dxgi_format_dds {
+enum struct dxgi_format_dds : uint32_t {
   DXGI_FORMAT_UNKNOWN = 0,
   DXGI_FORMAT_R32G32B32A32_TYPELESS = 1,
   DXGI_FORMAT_R32G32B32A32_FLOAT = 2,
@@ -415,7 +415,7 @@ enum dxgi_format_gli {
 };
 
 union dxgiFormat {
-  dxgiFormat() : DDS(DXGI_FORMAT_UNKNOWN) {}
+  dxgiFormat() : DDS(dxgi_format_dds::DXGI_FORMAT_UNKNOWN) {}
 
   dxgiFormat(dxgi_format_dds DDS) : DDS(DDS) {}
 

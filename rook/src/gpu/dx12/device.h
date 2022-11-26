@@ -36,7 +36,7 @@ public:
       -> eastl::shared_ptr<Resource> override;
   auto create_sampler(SamplerDescriptor const &desc)
       -> eastl::shared_ptr<Resource> override;
-  auto create_view(eastl::shared_ptr<Resource> const resource,
+  auto create_view(eastl::shared_ptr<Resource> const &resource,
                    ViewDescriptor const &view_desc)
       -> eastl::shared_ptr<View> override;
   auto create_binding_set_layout(eastl::vector<BindKey> const &descs)
